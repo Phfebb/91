@@ -1,62 +1,19 @@
 /* =========================================================
  * Design Tokens
- * 深色 + 暖橙的精致化视频站视觉系统
- * 三层灰阶背景 / 柔化暖橙主色 / 多层柔阴影 / 统一尺度
+ *
+ * 两套主题：
+ *   [data-theme="dark"]  暗黑 + 暖橙（默认 / 兜底）
+ *   [data-theme="pink"]  奶油白 + 樱花粉
+ *
+ * 切换方式：
+ *   document.documentElement.setAttribute("data-theme", "pink" | "dark")
+ *
+ * 设计约束：
+ *   - 两套用相同的 token key，组件 CSS 一行不动
+ *   - 间距 / 圆角 / 字号 / 过渡等"非主题"变量挂在 :root
  * ========================================================= */
+
 :root {
-  /* ----- 表面色（三层灰阶，从最深到最浅） ----- */
-  --bg-page: #0b0c10;          /* 页面底色，最深 */
-  --bg-surface: #14161c;       /* 卡片/面板 */
-  --bg-elevated: #1b1e26;      /* 浮起层（hover、激活） */
-  --bg-sunken: #0a0b0f;        /* 下沉层（输入框、嵌套区） */
-  --bg-overlay: rgba(8, 9, 13, 0.78);
-
-  /* 半透明玻璃 */
-  --glass-nav: rgba(13, 14, 19, 0.78);
-  --glass-card: rgba(20, 22, 28, 0.72);
-
-  /* ----- 边框 ----- */
-  --border-subtle: rgba(255, 255, 255, 0.06);
-  --border-default: rgba(255, 255, 255, 0.09);
-  --border-strong: rgba(255, 255, 255, 0.16);
-  --border-accent: rgba(255, 138, 60, 0.45);
-
-  /* ----- 文本 ----- */
-  --text-strong: #f5f5f7;      /* 标题、强调 */
-  --text-default: #d8d9de;     /* 正文 */
-  --text-muted: #9a9ba4;       /* 次要 */
-  --text-faint: #6c6e78;       /* 辅助 */
-  --text-disabled: #4a4c55;
-  --text-on-accent: #1a0f04;   /* 橙色按钮上的深色文字 */
-  --text-on-dark: #ffffff;
-
-  /* ----- 主色（暖橙，比之前低饱和、更暖） ----- */
-  --accent: #ff8a3c;
-  --accent-hover: #ffa05f;
-  --accent-strong: #ff7720;
-  --accent-soft: rgba(255, 138, 60, 0.14);
-  --accent-softer: rgba(255, 138, 60, 0.08);
-  --accent-glow: rgba(255, 138, 60, 0.3);
-  --accent-gradient: linear-gradient(135deg, #ff9a55 0%, #ff7322 100%);
-  --accent-gradient-strong: linear-gradient(135deg, #ffae6e 0%, #ff7322 60%, #f15f0d 100%);
-
-  /* ----- 状态色（柔和深色版） ----- */
-  --success: #3fcf8e;
-  --success-soft: rgba(63, 207, 142, 0.14);
-  --warning: #f5b54a;
-  --warning-soft: rgba(245, 181, 74, 0.14);
-  --danger: #f1556c;
-  --danger-soft: rgba(241, 85, 108, 0.14);
-  --info: #5aa2ff;
-  --info-soft: rgba(90, 162, 255, 0.14);
-
-  /* ----- 网盘品牌色（用于来源徽标） ----- */
-  --drive-quark: #5b8def;
-  --drive-p115: #f56b76;
-  --drive-pikpak: #8a6dff;
-  --drive-wopan: #ff8a3c;
-  --drive-onedrive: #4cabea;
-
   /* ----- 间距 ----- */
   --space-1: 4px;
   --space-2: 8px;
@@ -68,7 +25,7 @@
   --space-8: 40px;
   --space-9: 56px;
 
-  /* ----- 圆角（统一四档） ----- */
+  /* ----- 圆角 ----- */
   --radius-xs: 4px;
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -98,20 +55,6 @@
   --line-normal: 1.5;
   --line-relaxed: 1.7;
 
-  /* ----- 阴影（多层叠加，柔和深邃） ----- */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md:
-    0 2px 4px rgba(0, 0, 0, 0.3),
-    0 6px 16px rgba(0, 0, 0, 0.32);
-  --shadow-lg:
-    0 4px 8px rgba(0, 0, 0, 0.32),
-    0 16px 36px rgba(0, 0, 0, 0.4);
-  --shadow-xl:
-    0 8px 16px rgba(0, 0, 0, 0.32),
-    0 24px 60px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 0 0 1px var(--border-accent), 0 8px 28px var(--accent-glow);
-  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-
   /* ----- 容器 ----- */
   --container-max: 1280px;
   --container-pad-x: 24px;
@@ -131,4 +74,176 @@
   --z-overlay: 100;
   --z-modal: 200;
   --z-toast: 300;
+}
+
+/* =========================================================
+ * 暗黑 + 暖橙（默认）
+ * 兜底：未声明 data-theme 时也走这套
+ * ========================================================= */
+:root,
+:root[data-theme="dark"] {
+  /* ----- 表面色（三层灰阶，从最深到最浅） ----- */
+  --bg-page: #0b0c10;
+  --bg-surface: #14161c;
+  --bg-elevated: #1b1e26;
+  --bg-sunken: #0a0b0f;
+  --bg-overlay: rgba(8, 9, 13, 0.78);
+
+  /* 半透明玻璃 */
+  --glass-nav: rgba(13, 14, 19, 0.78);
+  --glass-card: rgba(20, 22, 28, 0.72);
+
+  /* ----- 边框 ----- */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-accent: rgba(255, 138, 60, 0.45);
+
+  /* ----- 文本 ----- */
+  --text-strong: #f5f5f7;
+  --text-default: #d8d9de;
+  --text-muted: #9a9ba4;
+  --text-faint: #6c6e78;
+  --text-disabled: #4a4c55;
+  --text-on-accent: #1a0f04;
+  --text-on-dark: #ffffff;
+
+  /* ----- 主色（暖橙） ----- */
+  --accent: #ff8a3c;
+  --accent-hover: #ffa05f;
+  --accent-strong: #ff7720;
+  --accent-soft: rgba(255, 138, 60, 0.14);
+  --accent-softer: rgba(255, 138, 60, 0.08);
+  --accent-glow: rgba(255, 138, 60, 0.3);
+  --accent-gradient: linear-gradient(135deg, #ff9a55 0%, #ff7322 100%);
+  --accent-gradient-strong: linear-gradient(135deg, #ffae6e 0%, #ff7322 60%, #f15f0d 100%);
+
+  /* ----- 状态色 ----- */
+  --success: #3fcf8e;
+  --success-soft: rgba(63, 207, 142, 0.14);
+  --warning: #f5b54a;
+  --warning-soft: rgba(245, 181, 74, 0.14);
+  --danger: #f1556c;
+  --danger-soft: rgba(241, 85, 108, 0.14);
+  --info: #5aa2ff;
+  --info-soft: rgba(90, 162, 255, 0.14);
+
+  /* ----- 网盘品牌色 ----- */
+  --drive-quark: #5b8def;
+  --drive-p115: #f56b76;
+  --drive-pikpak: #8a6dff;
+  --drive-wopan: #ff8a3c;
+  --drive-onedrive: #4cabea;
+
+  /* ----- 阴影 ----- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md:
+    0 2px 4px rgba(0, 0, 0, 0.3),
+    0 6px 16px rgba(0, 0, 0, 0.32);
+  --shadow-lg:
+    0 4px 8px rgba(0, 0, 0, 0.32),
+    0 16px 36px rgba(0, 0, 0, 0.4);
+  --shadow-xl:
+    0 8px 16px rgba(0, 0, 0, 0.32),
+    0 24px 60px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 0 1px var(--border-accent), 0 8px 28px var(--accent-glow);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* =========================================================
+ * 奶油白 + 樱花粉
+ *
+ * 设计要点：
+ *   - 页底用奶油白（带一点点粉的暖白），不用纯白避免刺眼
+ *   - 卡片层往上提亮到纯白；浮起层用淡粉
+ *   - 主色樱花粉（#ff5b8a），比玫粉冷，比草莓粉柔
+ *   - 文本用深咖紫（#2a1820）而非纯黑，氛围更柔
+ *   - 边框 / 阴影都改成"暗色描边 / 柔粉投影"，不要照搬暗色的"提亮描边"
+ * ========================================================= */
+:root[data-theme="pink"] {
+  /* ----- 表面色 ----- */
+  --bg-page: #fff5f7;
+  --bg-surface: #ffffff;
+  --bg-elevated: #ffe9ee;
+  --bg-sunken: #fbeaef;
+  --bg-overlay: rgba(255, 240, 244, 0.82);
+
+  /* 半透明玻璃（白底叠透明粉） */
+  --glass-nav: rgba(255, 250, 252, 0.78);
+  --glass-card: rgba(255, 255, 255, 0.72);
+
+  /* ----- 边框（暗色描边） ----- */
+  --border-subtle: rgba(255, 91, 138, 0.1);
+  --border-default: rgba(255, 91, 138, 0.18);
+  --border-strong: rgba(120, 50, 80, 0.24);
+  --border-accent: rgba(255, 91, 138, 0.55);
+
+  /* ----- 文本 ----- */
+  --text-strong: #2a1820;
+  --text-default: #4a3a44;
+  --text-muted: #8a6e78;
+  --text-faint: #b7a3ac;
+  --text-disabled: #d6c5cc;
+  --text-on-accent: #ffffff;
+  --text-on-dark: #2a1820;
+
+  /* ----- 主色（樱花粉） ----- */
+  --accent: #ff5b8a;
+  --accent-hover: #ff7aa2;
+  --accent-strong: #f43d75;
+  --accent-soft: rgba(255, 91, 138, 0.14);
+  --accent-softer: rgba(255, 91, 138, 0.08);
+  --accent-glow: rgba(255, 91, 138, 0.28);
+  --accent-gradient: linear-gradient(135deg, #ffb1c7 0%, #ff5b8a 100%);
+  --accent-gradient-strong: linear-gradient(135deg, #ffc1d4 0%, #ff5b8a 55%, #f43d75 100%);
+
+  /* ----- 状态色（粉白底下要稍稍加深） ----- */
+  --success: #1ea974;
+  --success-soft: rgba(30, 169, 116, 0.14);
+  --warning: #d99022;
+  --warning-soft: rgba(217, 144, 34, 0.16);
+  --danger: #e43b5c;
+  --danger-soft: rgba(228, 59, 92, 0.14);
+  --info: #3479d6;
+  --info-soft: rgba(52, 121, 214, 0.14);
+
+  /* ----- 网盘品牌色（粉白基底下重新调谐，整体柔化、降饱和） ----- */
+  --drive-quark: #4f7be0;
+  --drive-p115: #e0556a;
+  --drive-pikpak: #8466e6;
+  --drive-wopan: #e57a36;
+  --drive-onedrive: #2f95cf;
+
+  /* ----- 阴影（粉色柔投影 + 一层中性） ----- */
+  --shadow-sm: 0 1px 2px rgba(180, 90, 120, 0.08);
+  --shadow-md:
+    0 2px 4px rgba(180, 90, 120, 0.08),
+    0 8px 20px rgba(180, 90, 120, 0.1);
+  --shadow-lg:
+    0 4px 10px rgba(180, 90, 120, 0.1),
+    0 18px 40px rgba(180, 90, 120, 0.14);
+  --shadow-xl:
+    0 8px 16px rgba(180, 90, 120, 0.1),
+    0 28px 60px rgba(180, 90, 120, 0.18);
+  --shadow-glow: 0 0 0 1px var(--border-accent), 0 8px 28px var(--accent-glow);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+/* 粉白主题下，把 body::before 的"暖色光晕"改得更柔粉
+   （base.css 用的是写死的 rgba 渐变，这里放一层覆盖） */
+:root[data-theme="pink"] body::before {
+  background:
+    radial-gradient(1200px 600px at 85% -10%, rgba(255, 91, 138, 0.1), transparent 60%),
+    radial-gradient(900px 500px at 10% 110%, rgba(190, 130, 200, 0.07), transparent 60%);
+}
+
+/* 粉白主题下，自定义滚动条（base.css 用了硬编码白色透明） */
+:root[data-theme="pink"] ::-webkit-scrollbar-thumb {
+  background: rgba(180, 90, 120, 0.22);
+}
+:root[data-theme="pink"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(180, 90, 120, 0.36);
+}
+:root[data-theme="pink"] * {
+  scrollbar-color: rgba(180, 90, 120, 0.28) transparent;
 }

@@ -31,7 +31,12 @@ export function PreviewToggle() {
     // 乐观更新
     setEnabled(next);
     try {
-      const resp = await api.updateSettings({ previewEnabled: next });
+      // 同 PUT 时也要把当前 theme 带上，避免被后端的"未设置就忽略"逻辑覆盖。
+      const cur = await api.getSettings();
+      const resp = await api.updateSettings({
+        previewEnabled: next,
+        theme: cur.theme,
+      });
       setEnabled(resp.previewEnabled);
       show(
         next ? "已开启预览生成，正在补扫 pending" : "已关闭预览生成",

@@ -28,6 +28,9 @@ type AdminServer struct {
 	// Preview 开关读写
 	GetPreviewEnabled func() bool
 	SetPreviewEnabled func(enabled bool) error
+	// Theme 读写（"dark" | "pink"）
+	GetTheme func() string
+	SetTheme func(theme string) error
 }
 
 type GenerationStatus struct {
@@ -405,7 +408,8 @@ func (a *AdminServer) handleRegenFailedPreviews(w http.ResponseWriter, r *http.R
 // ---------- Settings ----------
 
 type settingsDTO struct {
-	PreviewEnabled bool `json:"previewEnabled"`
+	PreviewEnabled bool   `json:"previewEnabled"`
+	Theme          string `json:"theme"`
 }
 
 func (a *AdminServer) handleGetSettings(w http.ResponseWriter, r *http.Request) {
@@ -413,7 +417,13 @@ func (a *AdminServer) handleGetSettings(w http.ResponseWriter, r *http.Request) 
 	if a.GetPreviewEnabled != nil {
 		enabled = a.GetPreviewEnabled()
 	}
-	writeJSON(w, http.StatusOK, settingsDTO{PreviewEnabled: enabled})
+	theme := "dark"
+	if a.GetTheme != nil {
+		if v := a.GetTheme(); v != "" {
+			theme = v
+		}
+	}
+	writeJSON(w, http.StatusOK, settingsDTO{PreviewEnabled: enabled, Theme: theme})
 }
 
 func (a *AdminServer) handlePutSettings(w http.ResponseWriter, r *http.Request) {
@@ -428,5 +438,18 @@ func (a *AdminServer) handlePutSettings(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, settingsDTO{PreviewEnabled: body.PreviewEnabled})
+	if a.SetTheme != nil && body.Theme != "" {
+		if err := a.SetTheme(body.Theme); err != nil {
+			writeErr(w, http.StatusBadRequest, err)
+			return
+		}
+	}
+	// 回显最新值，避免前端再 GET 一次
+	resp := settingsDTO{PreviewEnabled: body.PreviewEnabled, Theme: body.Theme}
+	if a.GetTheme != nil {
+		if v := a.GetTheme(); v != "" {
+			resp.Theme = v
+		}
+	}
+	writeJSON(w, http.StatusOK, resp)
 }

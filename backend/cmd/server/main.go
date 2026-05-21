@@ -70,6 +70,7 @@ func main() {
 	defer cancel()
 
 	app.loadPreviewEnabled(ctx)
+	app.loadTheme(ctx)
 	if err := app.attachLocalUpload(ctx); err != nil {
 		log.Printf("[local-upload] attach failed: %v", err)
 	}
@@ -99,6 +100,7 @@ func main() {
 		OnVideoUploaded: func(v *catalog.Video) {
 			app.enqueueUploadedVideo(ctx, v)
 		},
+		GetTheme: func() string { return app.Theme() },
 	}
 
 	adminServer := &api.AdminServer{
@@ -133,6 +135,10 @@ func main() {
 		GetPreviewEnabled: func() bool { return app.PreviewEnabled() },
 		SetPreviewEnabled: func(enabled bool) error {
 			return app.SetPreviewEnabled(ctx, enabled)
+		},
+		GetTheme: func() string { return app.Theme() },
+		SetTheme: func(theme string) error {
+			return app.SetTheme(ctx, theme)
 		},
 	}
 
@@ -183,6 +189,8 @@ type App struct {
 
 	// 运行时 preview 开关（从 DB 读）
 	previewEnabled bool
+	// 全站主题（"dark" | "pink"），从 DB 读
+	theme string
 }
 
 // PreviewEnabled 线程安全读
@@ -237,6 +245,45 @@ func (a *App) loadPreviewEnabled(ctx context.Context) {
 	}
 	a.mu.Lock()
 	a.previewEnabled = v == "1"
+	a.mu.Unlock()
+}
+
+// Theme 线程安全读当前主题。
+func (a *App) Theme() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.theme == "" {
+		return "dark"
+	}
+	return a.theme
+}
+
+// SetTheme 切换并持久化主题；未知值会返回错误。
+func (a *App) SetTheme(ctx context.Context, theme string) error {
+	if theme != "dark" && theme != "pink" {
+		return fmt.Errorf("unsupported theme %q", theme)
+	}
+	a.mu.Lock()
+	a.theme = theme
+	a.mu.Unlock()
+	return a.cat.SetSetting(ctx, "ui.theme", theme)
+}
+
+// loadTheme 从 DB 读全站主题；找不到时回退到 "dark"。
+func (a *App) loadTheme(ctx context.Context) {
+	v, err := a.cat.GetSetting(ctx, "ui.theme", "dark")
+	if err != nil {
+		log.Printf("[theme] load setting: %v (fallback to dark)", err)
+		a.mu.Lock()
+		a.theme = "dark"
+		a.mu.Unlock()
+		return
+	}
+	if v != "pink" && v != "dark" {
+		v = "dark"
+	}
+	a.mu.Lock()
+	a.theme = v
 	a.mu.Unlock()
 }
 

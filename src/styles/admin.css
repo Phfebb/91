@@ -1297,3 +1297,310 @@
     justify-content: center;
   }
 }
+
+/* =========================================================
+ * Theme Page (外观)
+ *
+ * 两张主题预览卡，点击切换全站主题。每张卡内嵌一个迷你
+ * "页面骨架"展示该主题的色彩。卡片内部的颜色用 data-preview
+ * 强制锁定，不跟随当前主题，让用户能预览未选中的主题长什么样。
+ * ========================================================= */
+
+.theme-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.theme-page__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.theme-page__title {
+  font-size: var(--font-3xl);
+  font-weight: var(--weight-bold);
+  color: var(--text-strong);
+  letter-spacing: -0.01em;
+}
+
+.theme-page__sub {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-md);
+  line-height: var(--line-relaxed);
+  max-width: 60ch;
+}
+
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--space-5);
+}
+
+/* 单张主题卡 */
+.theme-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  transition: border-color var(--transition-fast),
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.theme-card:hover:not(:disabled) {
+  border-color: var(--border-accent);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.theme-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.theme-card.is-active {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-glow);
+}
+
+.theme-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+/* 预览区：迷你的"页面" */
+.theme-card__preview {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.theme-card[data-preview="dark"] .theme-card__preview {
+  background:
+    radial-gradient(80% 60% at 50% 0%, rgba(255, 138, 60, 0.18), transparent 70%),
+    linear-gradient(180deg, #14161c 0%, #0b0c10 100%);
+}
+
+.theme-card[data-preview="pink"] .theme-card__preview {
+  background:
+    radial-gradient(80% 60% at 50% 0%, rgba(255, 91, 138, 0.16), transparent 70%),
+    linear-gradient(180deg, #ffffff 0%, #fff5f7 100%);
+}
+
+/* 预览顶部模拟标题栏的小渐变条 */
+.theme-card__bar {
+  width: 36%;
+  height: 6px;
+  border-radius: var(--radius-pill);
+}
+
+.theme-card[data-preview="dark"] .theme-card__bar {
+  background: linear-gradient(135deg, #ff9a55 0%, #ff7322 100%);
+  box-shadow: 0 0 12px rgba(255, 138, 60, 0.4);
+}
+
+.theme-card[data-preview="pink"] .theme-card__bar {
+  background: linear-gradient(135deg, #ffb1c7 0%, #ff5b8a 100%);
+  box-shadow: 0 0 12px rgba(255, 91, 138, 0.32);
+}
+
+/* 模拟视频播放器 */
+.theme-card__player {
+  flex: 1 1 auto;
+  border-radius: 8px;
+  background: #000;
+  position: relative;
+  overflow: hidden;
+}
+
+.theme-card__player::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 8px 0 8px 14px;
+  border-color: transparent transparent transparent rgba(255, 255, 255, 0.85);
+}
+
+.theme-card[data-preview="dark"] .theme-card__player {
+  box-shadow: 0 0 0 1px rgba(255, 138, 60, 0.35),
+    0 12px 28px rgba(0, 0, 0, 0.5);
+}
+
+.theme-card[data-preview="pink"] .theme-card__player {
+  box-shadow: 0 0 0 1px rgba(255, 91, 138, 0.45),
+    0 12px 28px rgba(180, 90, 120, 0.18);
+}
+
+/* 模拟标题/作者文字行 */
+.theme-card__lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.theme-card__line {
+  height: 6px;
+  border-radius: var(--radius-pill);
+}
+
+.theme-card__line--lg {
+  width: 65%;
+}
+
+.theme-card__line--md {
+  width: 40%;
+}
+
+.theme-card[data-preview="dark"] .theme-card__line {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.theme-card[data-preview="dark"] .theme-card__line--lg {
+  background: rgba(255, 255, 255, 0.32);
+}
+
+.theme-card[data-preview="pink"] .theme-card__line {
+  background: rgba(120, 50, 80, 0.18);
+}
+
+.theme-card[data-preview="pink"] .theme-card__line--lg {
+  background: rgba(60, 28, 38, 0.45);
+}
+
+/* 模拟标签胶囊行 */
+.theme-card__chips {
+  display: flex;
+  gap: 6px;
+}
+
+.theme-card__chip {
+  width: 36px;
+  height: 12px;
+  border-radius: var(--radius-pill);
+}
+
+.theme-card[data-preview="dark"] .theme-card__chip {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.theme-card[data-preview="dark"] .theme-card__chip--accent {
+  background: rgba(255, 138, 60, 0.22);
+  border-color: rgba(255, 138, 60, 0.55);
+}
+
+.theme-card[data-preview="pink"] .theme-card__chip {
+  background: rgba(255, 91, 138, 0.08);
+  border: 1px solid rgba(255, 91, 138, 0.22);
+}
+
+.theme-card[data-preview="pink"] .theme-card__chip--accent {
+  background: rgba(255, 91, 138, 0.22);
+  border-color: rgba(255, 91, 138, 0.6);
+}
+
+/* 卡片底部信息区 */
+.theme-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.theme-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.theme-card__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  flex: 0 0 auto;
+}
+
+.theme-card__title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.theme-card__title {
+  font-size: var(--font-lg);
+  font-weight: var(--weight-bold);
+  color: var(--text-strong);
+  letter-spacing: -0.005em;
+}
+
+.theme-card__subtitle {
+  font-size: var(--font-xs);
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.theme-card__state {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--accent);
+  background: var(--accent-soft);
+  flex: 0 0 auto;
+}
+
+.theme-card:not(.is-active) .theme-card__state {
+  display: none;
+}
+
+.theme-card__spin {
+  animation: theme-spin 800ms linear infinite;
+}
+
+@keyframes theme-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.theme-card__desc {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-md);
+  line-height: var(--line-relaxed);
+}
+
+@media (max-width: 640px) {
+  .theme-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+}

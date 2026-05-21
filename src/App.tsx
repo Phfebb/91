@@ -9,6 +9,7 @@ import { RequireAuth } from "@/admin/RequireAuth";
 import { DrivesPage } from "@/admin/DrivesPage";
 import { VideosPage } from "@/admin/VideosPage";
 import { TagsPage } from "@/admin/TagsPage";
+import { ThemePage } from "@/admin/ThemePage";
 
 export default function App() {
   return (
@@ -62,6 +63,7 @@ export default function App() {
         <Route path="drives" element={<DrivesPage />} />
         <Route path="videos" element={<VideosPage />} />
         <Route path="tags" element={<TagsPage />} />
+        <Route path="theme" element={<ThemePage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

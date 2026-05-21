@@ -225,8 +225,11 @@ export function createTag(label: string, aliases: string[]) {
 
 // ---------- Settings ----------
 
+export type Theme = "dark" | "pink";
+
 export type Settings = {
   previewEnabled: boolean;
+  theme: Theme;
 };
 
 export function getSettings() {

@@ -55,6 +55,10 @@ type Server struct {
 	FFmpegPath      string
 	OnVideoUploaded func(*catalog.Video)
 
+	// GetTheme 返回当前生效的主题（"dark" | "pink"）。前台 /api/settings/theme 用，
+	// 不需要登录。无注入时返回 "dark"。
+	GetTheme func() string
+
 	transcodeMu   sync.Mutex
 	transcodeJobs map[string]bool
 }
@@ -116,6 +120,10 @@ type Comment struct {
 
 // RegisterRoutes 挂载前台 REST 路由。前台接口需要登录态。
 func (s *Server) RegisterRoutes(r chi.Router, a *auth.Authenticator) {
+	// 公开端点：拿当前生效的主题。登录页本身要在挂前就能读，所以单独挂在
+	// 鉴权组之外。只暴露 theme 一个字段，避免泄露其他设置。
+	r.Get("/api/settings/theme", s.handleGetTheme)
+
 	r.Group(func(r chi.Router) {
 		r.Use(a.Required)
 		r.Get("/api/home", s.handleHome)
@@ -137,6 +145,19 @@ func (s *Server) RegisterRoutes(r chi.Router, a *auth.Authenticator) {
 		r.Get("/p/preview/{videoID}", s.handlePreview)
 		r.Get("/p/thumb/{videoID}", s.handleThumb)
 	})
+}
+
+// handleGetTheme 返回当前生效的主题。无需登录。响应永远是
+// {"theme": "dark"} 或 {"theme": "pink"}，便于前端无脑解析。
+func (s *Server) handleGetTheme(w http.ResponseWriter, r *http.Request) {
+	theme := "dark"
+	if s.GetTheme != nil {
+		if v := s.GetTheme(); v == "pink" || v == "dark" {
+			theme = v
+		}
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{"theme": theme})
 }
 
 func (s *Server) handleHome(w http.ResponseWriter, r *http.Request) {

@@ -1322,6 +1322,68 @@ src/
 - 不引入新依赖，颜色全部走 `tokens.css`，未使用 `!important`。
 - `lint` (`tsc --noEmit`) 和 `build` (`tsc -b && vite build`) 均通过。
 
+### 14.6 双主题系统（2026-05-21）
+
+新增管理后台"外观"页，全站可在两套主题间切换：
+
+- **暗黑 + 暖橙（dark，默认）**：原有的视觉系统
+- **奶油白 + 樱花粉（pink）**：奶油白 `#fff5f7` 页底 + 樱花粉 `#ff5b8a` 主色 + 深咖紫 `#2a1820` 文本 + 粉色柔投影
+
+切换语义为"全站统一"——管理员选什么，所有访客看到什么。前台普通用户看不到切换控件。
+
+#### 实现方式
+
+**1. CSS 变量分组**
+- `src/styles/tokens.css` 重写：把 `:root` 按主题相关 / 无关拆分。
+- 间距 / 圆角 / 字号 / 字重 / 行高 / 容器 / 过渡 / 层级挂在 `:root`，两套主题共享。
+- 暗色色 token 挂在 `:root, :root[data-theme="dark"]`（既作为默认值，又作为显式 dark 兜底）。
+- 粉白色 token 挂在 `:root[data-theme="pink"]`，所有 key 与暗色对齐，组件 CSS 不动。
+- 粉白下额外覆盖 `body::before` 的暖光晕和滚动条颜色（`base.css` 那部分用了硬编码白色透明）。
+
+切换不重新载样式表，只换 `<html data-theme>` 属性，浏览器原生重算 CSS 变量，性能可忽略。
+
+**2. 防首屏闪烁**
+`index.html` `<head>` 加一段同步 inline script：
+
+```js
+var t = localStorage.getItem("video-site:theme");
+document.documentElement.setAttribute(
+  "data-theme",
+  t === "pink" || t === "dark" ? t : "dark"
+);
+```
+
+样式表加载之前 `data-theme` 就已写到 `<html>`，避免"先黑后粉"的视觉跳变。
+
+**3. 服务端权威同步**
+- 后端在 SQLite `settings` 表里以 key=`ui.theme` 存当前主题。`backend/cmd/server/main.go` 加 `App.Theme()` / `App.SetTheme()` / `App.loadTheme()`。
+- 公开端点 `GET /api/settings/theme` 在 `RegisterRoutes` 鉴权组之外（登录页本身要正确显示主题），只暴露 `theme` 一个字段。
+- `src/main.tsx` 在 `ReactDOM.createRoot` 之前并行 fire `syncThemeFromServer()`，把服务端值覆盖本地（不 await）。
+
+**4. 后台切换**
+- `src/admin/ThemePage.tsx`：两张大主题预览卡，每张带迷你"页面骨架"（顶部色条 + 黑底播放器三角 + 文字行 + chips）。
+- 卡内预览色用 `data-preview="dark|pink"` 强制锁定，不跟随当前主题，让用户能看到未选中主题的样子。
+- 点击切换：先 `applyTheme()` 本地立即生效（写 `<html data-theme>` + `localStorage`），再 PUT `/admin/api/settings`；失败回滚。
+- 复用现有 `Settings` DTO（`previewEnabled` + `theme`），后端 `handlePutSettings` 中对 `theme==""` 时不写 DB（局部更新友好）。
+- `App.tsx` 路由加 `/admin/theme`；`AdminLayout.tsx` 侧栏加 Palette 图标 "外观" 菜单项。
+- `src/admin/PreviewToggle.tsx` toggle 时显式带上当前 `theme` 一起 PUT，保险。
+
+**5. 关键文件**
+- 后端：`backend/internal/api/admin.go`、`backend/internal/api/api.go`、`backend/cmd/server/main.go`
+- 前端：`index.html`、`src/main.tsx`、`src/lib/theme.ts`、`src/styles/tokens.css`、`src/styles/admin.css`、`src/admin/api.ts`、`src/admin/PreviewToggle.tsx`、`src/admin/ThemePage.tsx`、`src/admin/AdminLayout.tsx`、`src/App.tsx`
+
+#### 已知限制
+
+- 组件 CSS 里有 ~45 处硬编码的 `rgba(255, 255, 255, N)`（暗色下做提亮 hover 边框/底色）。这些在粉白下会变成几乎不可见的"白叠白"，导致 hover 反馈稍弱，但不破坏布局。后续若要彻底干净，可以批量替换成 `color-mix(in srgb, var(--text-strong) Nx100%, transparent)`，让两套主题各自反向叠加。当前优先级低。
+- 配色已在主要页面（首页 / 列表 / 视频详情 / 管理后台）核验过整体不翻车；如有具体页面在粉白下视觉异常，单独修补即可。
+
+#### 验证
+
+- `gofmt`：本次改的 3 个 go 文件干净
+- `go test ./... -count=1`：全部 PASS
+- `npm run lint`：干净
+- `npm run build`：CSS 80.48 kB / JS 246.33 kB / index.html 1.44 kB（含 inline theme 同步 script）
+
 ## 15. 后端集成方案（网盘驱动 + 元数据 + 预览生成）
 
 本节记录接入真实网盘后端的架构和关键决策。
