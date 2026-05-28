@@ -165,6 +165,14 @@ go test ./... -count=1
 
 ## 部署到 Linux
 
+推荐先使用根目录的预编译安装脚本：
+
+```bash
+sudo bash install.sh
+```
+
+它会从 GitHub Release 下载预编译包，安装运行依赖、写入 systemd 服务并启动。下面是手动部署方式，适合你想自己接管构建和服务管理时使用。
+
 ```bash
 # 交叉编译
 GOOS=linux GOARCH=amd64 go build -o video-server ./cmd/server

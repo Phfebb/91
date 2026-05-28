@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -212,6 +213,7 @@ func main() {
 
 	apiServer.RegisterRoutes(r, authr)
 	adminServer.Register(r)
+	mountFrontend(r)
 
 	// 凌晨流水线：每天 cron_hour 触发一次，串行跑
 	//   Phase 1 扫所有非 spider91 / localupload 网盘 + 删除检测 + 入队封面/teaser
@@ -1439,6 +1441,65 @@ func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func mountFrontend(r chi.Router) {
+	dir := strings.TrimSpace(os.Getenv("VIDEO_FRONTEND_DIR"))
+	if dir == "" {
+		dir = "./dist"
+	}
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return
+	}
+	indexPath := filepath.Join(dir, "index.html")
+	if st, err := os.Stat(indexPath); err != nil || st.IsDir() {
+		return
+	}
+	log.Printf("serving frontend from %s", dir)
+	r.NotFound(frontendHandler(dir))
+}
+
+func frontendHandler(dir string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			http.NotFound(w, r)
+			return
+		}
+		if isBackendRoute(r.URL.Path) {
+			http.NotFound(w, r)
+			return
+		}
+
+		cleanPath := path.Clean("/" + r.URL.Path)
+		rel := strings.TrimPrefix(cleanPath, "/")
+		if rel != "" && rel != "." {
+			name := filepath.FromSlash(rel)
+			f, err := os.Open(filepath.Join(dir, name))
+			if err == nil {
+				defer f.Close()
+				if st, statErr := f.Stat(); statErr == nil && !st.IsDir() {
+					http.ServeContent(w, r, st.Name(), st.ModTime(), f)
+					return
+				}
+			}
+			if filepath.Ext(name) != "" {
+				http.NotFound(w, r)
+				return
+			}
+		}
+
+		http.ServeFile(w, r, filepath.Join(dir, "index.html"))
+	}
+}
+
+func isBackendRoute(p string) bool {
+	return p == "/api" ||
+		strings.HasPrefix(p, "/api/") ||
+		p == "/admin/api" ||
+		strings.HasPrefix(p, "/admin/api/") ||
+		p == "/p" ||
+		strings.HasPrefix(p, "/p/")
 }
 
 func parseBoolDefault(raw string, def bool) bool {

@@ -71,6 +71,68 @@ npm install
 FRONTEND_MODE=dev ./start.sh --restart
 ```
 
+## 新服务器一键安装
+
+如果你只是想在一台 Ubuntu / Debian 服务器上尽快跑起来，推荐使用预编译安装脚本。普通用户不需要安装 Go、Node.js，也不需要自己编译；脚本会按服务器 CPU 架构下载 GitHub Release 里的预编译包，安装运行依赖，写入 systemd 服务并启动。
+
+```bash
+sudo apt update
+sudo apt install -y curl ca-certificates
+curl -fsSL https://raw.githubusercontent.com/nianzhibai/91/main/install.sh -o install.sh
+sudo bash install.sh
+```
+
+部署完成后访问：
+
+- 前台：`http://服务器IP:9191/`
+- 后台：`http://服务器IP:9191/admin`
+
+第一次打开后台会要求设置管理员用户名和密码。常用维护命令：
+
+```bash
+sudo bash install.sh status
+sudo bash install.sh logs
+sudo bash install.sh update
+sudo bash install.sh restart
+sudo bash install.sh stop
+```
+
+安装后会自动创建 `91` 指令，和 OpenList 的管理指令类似：
+
+```bash
+91          # 打开管理菜单
+91 status   # 查看状态
+91 logs     # 查看日志
+91 update   # 更新
+91 restart  # 重启
+91 stop     # 停止
+```
+
+同时也保留 `video-site-91` 作为同等别名。
+
+想换端口：
+
+```bash
+FRONTEND_PORT=8080 sudo -E bash install.sh
+```
+
+如果服务器还有云厂商安全组，请记得放行对应端口，默认是 `9191/tcp`。
+
+如果你是项目维护者，要预先编译发布包：
+
+```bash
+scripts/build-release.sh
+```
+
+它会生成：
+
+- `release/video-site-91-linux-amd64.tar.gz`
+- `release/video-site-91-linux-arm64.tar.gz`
+
+把这两个文件上传到 GitHub Release 后，`install.sh` 就能自动下载。仓库也带了 GitHub Actions：推送 `v*` 标签时会自动构建并上传这两个 Release 包。
+
+源码部署仍然保留在 `deploy.sh`，适合你想在服务器上直接 clone、编译和调试时使用。
+
 ## 第一次使用
 
 1. 打开 `http://127.0.0.1:9191/`，先完成管理员账号设置。
