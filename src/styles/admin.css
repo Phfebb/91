@@ -2971,6 +2971,7 @@
   display: grid;
   place-items: center;
   color: #fff;
+  background: var(--accent);
   font-size: 13px;
   font-weight: var(--weight-bold);
   text-transform: capitalize;
@@ -2983,6 +2984,7 @@
 .admin-drive-card__brand-icon[data-kind="pikpak"] { background: var(--drive-pikpak); }
 .admin-drive-card__brand-icon[data-kind="wopan"] { background: var(--drive-wopan); }
 .admin-drive-card__brand-icon[data-kind="onedrive"] { background: var(--drive-onedrive); }
+.admin-drive-card__brand-icon[data-kind="googledrive"] { background: #4285f4; }
 .admin-drive-card__brand-icon[data-kind="localstorage"] { background: var(--drive-localstorage); }
 .admin-drive-card__brand-icon[data-kind="spider91"] { background: var(--accent); }
 

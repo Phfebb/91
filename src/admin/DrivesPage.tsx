@@ -20,6 +20,7 @@ import { formatBytes } from "./storageFormat";
 import { makeUniqueDriveId } from "./driveId";
 import {
   FormState,
+  driveKindAbbr,
   kindLabel,
   emptyForm,
   idleNightlyStatus,
@@ -770,7 +771,7 @@ export function DrivesPage() {
               <div className="admin-drive-card__header">
                 <div className="admin-drive-card__title">
                   <span className="admin-drive-card__brand-icon" data-kind={d.kind}>
-                    {d.kind.substring(0, 2)}
+                    {driveKindAbbr(d.kind)}
                   </span>
                   <span>{d.name || d.id}</span>
                 </div>

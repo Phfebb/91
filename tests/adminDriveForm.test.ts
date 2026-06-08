@@ -191,6 +191,15 @@ test("drive type selector keeps primary source order", () => {
   ]);
 });
 
+test("drive cards use configured abbreviations and visible fallback icon colors", () => {
+  assert.match(constantsSource, /googledrive:\s*"GD"/);
+  assert.match(constantsSource, /function driveKindAbbr\(kind: string\)/);
+  assert.match(constantsSource, /\.slice\(0, 2\)\.toUpperCase\(\)/);
+  assert.match(drivesPageSource, /driveKindAbbr\(d\.kind\)/);
+  assert.match(adminCss, /\.admin-drive-card__brand-icon\s*\{[^}]*background:\s*var\(--accent\);/s);
+  assert.match(adminCss, /\.admin-drive-card__brand-icon\[data-kind="googledrive"\]\s*\{\s*background:\s*#4285f4;\s*\}/);
+});
+
 test("drive management exposes stop task controls", () => {
   assert.match(apiSource, /stopDriveTasks/);
   assert.match(apiSource, /\/drives\/\$\{encodeURIComponent\(id\)\}\/tasks\/stop/);

@@ -12,6 +12,16 @@ export const kindAbbr: Record<string, string> = {
   spider91: "91",
 };
 
+export function driveKindAbbr(kind: string): string {
+  const explicit = kindAbbr[kind];
+  if (explicit) return explicit;
+
+  const trimmed = kind.trim();
+  if (!trimmed) return "??";
+  const compact = trimmed.replace(/[^a-zA-Z0-9]+/g, "");
+  return (compact || trimmed).slice(0, 2).toUpperCase();
+}
+
 export const kindLabel: Record<string, string> = {
   quark: "夸克网盘",
   p115: "115 网盘",
