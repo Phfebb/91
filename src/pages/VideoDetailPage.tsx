@@ -10,7 +10,6 @@ import {
   deleteVideo,
   fetchTags,
   fetchVideoDetail,
-  hideVideo,
   recordView,
   updateVideoTags,
 } from "@/data/videos";
@@ -23,7 +22,6 @@ export default function VideoDetailPage() {
   const [tags, setTags] = useState<TagItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [tagSaving, setTagSaving] = useState(false);
-  const [hideSaving, setHideSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteSource, setDeleteSource] = useState(false);
   const [deleteSaving, setDeleteSaving] = useState(false);
@@ -65,19 +63,6 @@ export default function VideoDetailPage() {
       setDetail({ ...detail, tags: updated.tags ?? [] });
     } finally {
       setTagSaving(false);
-    }
-  }
-
-  async function handleHideVideo() {
-    if (!detail || hideSaving) return;
-    if (!window.confirm("确定以后不再展示这个视频吗？")) return;
-    setHideSaving(true);
-    try {
-      await hideVideo(detail.id);
-      navigate("/list", { replace: true });
-    } catch {
-      setHideSaving(false);
-      window.alert("隐藏失败，请稍后重试");
     }
   }
 
@@ -233,9 +218,7 @@ export default function VideoDetailPage() {
 
                 <VideoActions
                   video={detail}
-                  onHideVideo={handleHideVideo}
                   onDeleteVideo={handleOpenDelete}
-                  hideSaving={hideSaving}
                   deleteSaving={deleteSaving}
                 />
               </section>

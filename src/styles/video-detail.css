@@ -485,6 +485,27 @@
 }
 
 @media (max-width: 640px) {
+  .video-player .art-video-player {
+    --art-settings-icon-size: 18px;
+    --art-settings-max-height: 132px;
+    --art-selector-max-height: 132px;
+    --art-scrollbar-size: 3px;
+  }
+
+  .video-player .art-settings {
+    border-radius: 8px;
+    font-size: 12px;
+  }
+
+  .video-player .art-settings .art-setting-panel .art-setting-item {
+    padding: 0 7px;
+  }
+
+  .video-player .art-settings .art-setting-item-left,
+  .video-player .art-settings .art-setting-item-right {
+    gap: 5px;
+  }
+
   .video-player__error {
     width: calc(100% - 24px);
     padding: 16px;
@@ -784,7 +805,7 @@
   cursor: not-allowed;
 }
 
-.vd-actions__hide {
+.vd-actions__delete {
   margin-left: auto;
 }
 
@@ -1869,10 +1890,16 @@
 
   .vd-skeleton__actions {
     display: grid;
-    grid-template-columns: 1fr 1fr 44px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
   }
 
   .vd-skeleton__actions span {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .vd-skeleton__actions span:last-child {
     width: 100%;
   }
 
@@ -1888,7 +1915,7 @@
     gap: var(--space-2) var(--space-3);
   }
 
-  /* 操作栏：点赞点踩组合占满主行，"不再显示"折到右侧或单独一行 */
+  /* 操作栏：点赞点踩组合占满主行，删除按钮固定在右侧 */
   .vd-actions {
     padding: var(--space-3) 0 0;
     gap: var(--space-2);
@@ -1907,19 +1934,8 @@
     padding: 0 var(--space-3);
   }
 
-  .vd-actions__hide {
-    margin-left: 0;
-    width: 44px;
-    padding: 0;
-    justify-content: center;
-    flex: 0 0 auto;
-  }
-
-  .vd-actions__hide span {
-    display: none;
-  }
-
   .vd-actions__delete {
+    margin-left: 0;
     width: 44px;
     padding: 0;
     justify-content: center;
@@ -1931,7 +1947,7 @@
   }
 
   .vd-delete-modal {
-    align-items: end;
+    place-items: center;
     padding: var(--space-3);
   }
 
