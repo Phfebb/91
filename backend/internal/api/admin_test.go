@@ -1704,6 +1704,94 @@ func TestHandleWopanQRStatus(t *testing.T) {
 	}
 }
 
+func TestHandleGuangYaPanQRStart(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/v1/auth/device/code" {
+			http.NotFound(w, r)
+			return
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if body["scope"] != "user" {
+			t.Fatalf("scope = %#v, want user", body["scope"])
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"device_code":               "device-1",
+			"verification_uri_complete": "https://account.guangyapan.example/device?code=abc",
+			"interval":                  5,
+			"expires_in":                300,
+		})
+	}))
+	t.Cleanup(upstream.Close)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/api/drives/guangyapan/qr", nil)
+	rr := httptest.NewRecorder()
+	(&AdminServer{GuangYaPanAccountBaseURL: upstream.URL}).handleGuangYaPanQRStart(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+	var got struct {
+		DeviceCode     string `json:"deviceCode"`
+		QRCodeURL      string `json:"qrCodeUrl"`
+		QRImageDataURL string `json:"qrImageDataUrl"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.DeviceCode != "device-1" || got.QRCodeURL != "https://account.guangyapan.example/device?code=abc" {
+		t.Fatalf("response = %#v", got)
+	}
+	if !strings.HasPrefix(got.QRImageDataURL, "data:image/png;base64,") {
+		t.Fatalf("qr image = %q", got.QRImageDataURL)
+	}
+}
+
+func TestHandleGuangYaPanQRStatus(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/v1/auth/token" {
+			http.NotFound(w, r)
+			return
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if body["device_code"] != "device-1" {
+			t.Fatalf("device_code = %#v, want device-1", body["device_code"])
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token":  "access-1",
+			"refresh_token": "refresh-1",
+			"token_type":    "Bearer",
+		})
+	}))
+	t.Cleanup(upstream.Close)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/api/drives/guangyapan/qr/status?deviceCode=device-1", nil)
+	rr := httptest.NewRecorder()
+	(&AdminServer{GuangYaPanAccountBaseURL: upstream.URL}).handleGuangYaPanQRStatus(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+	var got struct {
+		State        string `json:"state"`
+		AccessToken  string `json:"accessToken"`
+		RefreshToken string `json:"refreshToken"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.State != "success" || got.AccessToken != "access-1" || got.RefreshToken != "refresh-1" {
+		t.Fatalf("response = %#v", got)
+	}
+}
+
 func TestHandleTestCrawlerScriptRunsImportedScript(t *testing.T) {
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 is required for crawler script dry-run")

@@ -1532,6 +1532,7 @@ function getDriveShortName(source: string): string {
   if (s.includes("quark") || s.includes("夸克")) return "Quak";
   if (s.includes("onedrive")) return "OneDrive";
   if (s.includes("wopan") || s.includes("沃盘")) return "沃盘";
+  if (s.includes("guangyapan") || s.includes("guangya") || s.includes("光鸭")) return "光鸭";
   if (s.includes("localstorage") || s.includes("本地")) return "本地";
   if (s.includes("spider") || s.includes("爬虫")) return "爬虫";
   return source.substring(0, 4);

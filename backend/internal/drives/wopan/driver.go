@@ -510,42 +510,14 @@ func isWopanRateLimitError(err error) bool {
 	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
-	text := strings.ToLower(strings.TrimSpace(err.Error()))
-	if text == "" {
-		return false
-	}
-	return strings.Contains(text, "status: 429") ||
-		strings.Contains(text, "status 429") ||
-		strings.Contains(text, "http status: 429") ||
-		strings.Contains(text, "status: 500") ||
-		strings.Contains(text, "status 500") ||
-		strings.Contains(text, "status: 502") ||
-		strings.Contains(text, "status 502") ||
-		strings.Contains(text, "status: 503") ||
-		strings.Contains(text, "status 503") ||
-		strings.Contains(text, "status: 504") ||
-		strings.Contains(text, "status 504") ||
-		strings.Contains(text, "status: 509") ||
-		strings.Contains(text, "status 509") ||
-		strings.Contains(text, "too many request") ||
-		strings.Contains(text, "too many requests") ||
-		strings.Contains(text, "rate limit") ||
-		strings.Contains(text, "rate-limit") ||
-		strings.Contains(text, "throttl") ||
-		strings.Contains(text, "blocked") ||
-		strings.Contains(text, "request has been blocked") ||
-		strings.Contains(text, "操作频繁") ||
-		strings.Contains(text, "请求频繁") ||
-		strings.Contains(text, "请求太频繁") ||
-		strings.Contains(text, "请求过于频繁") ||
-		strings.Contains(text, "频率限制") ||
-		strings.Contains(text, "请求次数过多") ||
-		strings.Contains(text, "系统繁忙") ||
-		strings.Contains(text, "服务繁忙") ||
-		strings.Contains(text, "稍后再试") ||
-		strings.Contains(text, "稍后重试") ||
-		strings.Contains(text, "访问被阻断") ||
-		strings.Contains(text, "风控")
+	return drives.ErrorMentionsHTTPStatus(err,
+		http.StatusTooManyRequests,
+		http.StatusInternalServerError,
+		http.StatusBadGateway,
+		http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout,
+		509,
+	)
 }
 
 func guessMime(name string) string {

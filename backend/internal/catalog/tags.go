@@ -124,6 +124,9 @@ CREATE TABLE IF NOT EXISTS deleted_videos (
 	if err := c.reconcileThumbnailStatusOnce(ctx); err != nil {
 		return err
 	}
+	if err := c.requeueSkippedPreviews(ctx); err != nil {
+		return err
+	}
 	if _, err := c.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_videos_content_hash ON videos(content_hash)`); err != nil {
 		return err
 	}
@@ -292,6 +295,24 @@ UPDATE videos
 	}
 	if err := c.SetSetting(ctx, markerKey, "1"); err != nil {
 		return fmt.Errorf("write %s marker: %w", markerKey, err)
+	}
+	return nil
+}
+
+func (c *Catalog) requeueSkippedPreviews(ctx context.Context) error {
+	res, err := c.db.ExecContext(ctx, `
+UPDATE videos
+   SET preview_file_id = '',
+       preview_local = '',
+       preview_status = 'pending',
+       updated_at = ?
+ WHERE COALESCE(preview_status, 'pending') = 'skipped'
+`, time.Now().UnixMilli())
+	if err != nil {
+		return fmt.Errorf("requeue skipped previews: %w", err)
+	}
+	if affected, err := res.RowsAffected(); err == nil && affected > 0 {
+		log.Printf("[catalog] requeued %d skipped preview(s) for generation", affected)
 	}
 	return nil
 }

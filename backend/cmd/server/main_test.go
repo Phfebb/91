@@ -391,6 +391,37 @@ func TestDriveGenerationStatusIncludesScanState(t *testing.T) {
 	}
 }
 
+func TestDriveGenerationStatusIncludesScanCooldown(t *testing.T) {
+	until := time.Now().Add(time.Hour).Round(time.Second)
+	app := &App{
+		scanQueued: map[string]bool{"drive-id": true},
+		scanProgress: map[string]driveScanProgress{
+			"drive-id": {Scanned: 12, Added: 3, CooldownUntil: until},
+		},
+	}
+
+	status := app.driveGenerationStatuses()["drive-id"].Scan
+	if status.State != "cooling" {
+		t.Fatalf("scan status = %#v, want cooling", status)
+	}
+	if status.CooldownUntil != until.Format(time.RFC3339) {
+		t.Fatalf("cooldown until = %q, want %q", status.CooldownUntil, until.Format(time.RFC3339))
+	}
+}
+
+func TestGuangYaPanGenerationCooldowns(t *testing.T) {
+	drv := &serverFakeKindDrive{id: "gy", kind: "guangyapan"}
+	if got := generationCooldownForDrive(drv); got != 10*time.Minute {
+		t.Fatalf("generation cooldown = %s, want 10m", got)
+	}
+	if got := fingerprintConfigForDrive(drv).RateLimitCooldown; got != 10*time.Minute {
+		t.Fatalf("fingerprint cooldown = %s, want 10m", got)
+	}
+	if got := scanCooldownForDrive(drv); got != 10*time.Minute {
+		t.Fatalf("scan cooldown = %s, want 10m", got)
+	}
+}
+
 func TestRunSpider91MigrationAfterManualCrawlRequiresConfiguredUploadTarget(t *testing.T) {
 	ctx := context.Background()
 	registry := proxy.NewRegistry()

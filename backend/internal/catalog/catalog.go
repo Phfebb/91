@@ -1992,7 +1992,7 @@ func normalizeDriveRootFields(d *Drive) {
 func normalizeDriveRootID(kind, rootID string) string {
 	rootID = strings.TrimSpace(rootID)
 	switch kind {
-	case "pikpak":
+	case "pikpak", "guangyapan":
 		if rootID == "0" {
 			return ""
 		}

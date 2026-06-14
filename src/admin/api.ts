@@ -78,7 +78,7 @@ export function checkUpdate() {
 
 export type AdminDrive = {
   id: string;
-  kind: "quark" | "p115" | "p123" | "pikpak" | "wopan" | "onedrive" | "googledrive" | "localstorage" | "spider91";
+  kind: "quark" | "p115" | "p123" | "pikpak" | "wopan" | "guangyapan" | "onedrive" | "googledrive" | "localstorage" | "spider91";
   name: string;
   rootId: string;
   status: string;
@@ -155,7 +155,7 @@ export function getDriveStorage() {
 
 export type UpsertDriveInput = {
   id: string;
-  kind: "quark" | "p115" | "p123" | "pikpak" | "wopan" | "onedrive" | "googledrive" | "localstorage" | "spider91";
+  kind: "quark" | "p115" | "p123" | "pikpak" | "wopan" | "guangyapan" | "onedrive" | "googledrive" | "localstorage" | "spider91";
   name: string;
   rootId: string;
   credentials: Record<string, string>;
@@ -374,6 +374,33 @@ export function startWopanQRLogin() {
 
 export function getWopanQRStatus(uuid: string) {
   return request<WopanQRStatus>(`/drives/wopan/qr/${encodeURIComponent(uuid)}`);
+}
+
+export type GuangYaPanQRSession = {
+  deviceCode: string;
+  qrCodeUrl: string;
+  qrImageDataUrl: string;
+  intervalSeconds: number;
+  expiresAt?: string;
+};
+
+export type GuangYaPanQRStatus = {
+  state: "pending" | "success" | "expired" | "denied" | "error";
+  statusText: string;
+  intervalSeconds?: number;
+  accessToken?: string;
+  refreshToken?: string;
+  tokenType?: string;
+  expiresIn?: number;
+};
+
+export function startGuangYaPanQRLogin() {
+  return request<GuangYaPanQRSession>("/drives/guangyapan/qr", { method: "POST" });
+}
+
+export function getGuangYaPanQRStatus(deviceCode: string) {
+  const qs = new URLSearchParams({ deviceCode });
+  return request<GuangYaPanQRStatus>(`/drives/guangyapan/qr/status?${qs.toString()}`);
 }
 
 /**

@@ -754,8 +754,8 @@ func (d *Driver) request(ctx context.Context, endpoint, method string, configure
 	return nil, errors.New("123pan request: unauthorized")
 }
 
-func isP123RateLimitResponse(res *resty.Response, code int, message string) bool {
-	if code == http.StatusTooManyRequests || isP123RateLimitMessage(message) {
+func isP123RateLimitResponse(res *resty.Response, code int, _ string) bool {
+	if code == http.StatusTooManyRequests {
 		return true
 	}
 	if res == nil {
@@ -764,7 +764,7 @@ func isP123RateLimitResponse(res *resty.Response, code int, message string) bool
 	return isP123RateLimitHTTPResponse(res.StatusCode(), res.Header().Get("Retry-After"), res.String())
 }
 
-func isP123RateLimitHTTPResponse(status int, retryAfter, body string) bool {
+func isP123RateLimitHTTPResponse(status int, retryAfter, _ string) bool {
 	if status == http.StatusTooManyRequests {
 		return true
 	}
@@ -774,33 +774,7 @@ func isP123RateLimitHTTPResponse(status int, retryAfter, body string) bool {
 			return true
 		}
 	}
-	if isP123RateLimitMessage(body) {
-		return true
-	}
 	return false
-}
-
-func isP123RateLimitMessage(message string) bool {
-	text := strings.ToLower(strings.TrimSpace(message))
-	if text == "" {
-		return false
-	}
-	return strings.Contains(text, "请求太频繁") ||
-		strings.Contains(text, "请求过于频繁") ||
-		strings.Contains(text, "请求频繁") ||
-		strings.Contains(text, "操作频繁") ||
-		strings.Contains(text, "频率限制") ||
-		strings.Contains(text, "请求次数过多") ||
-		strings.Contains(text, "too many request") ||
-		strings.Contains(text, "too many requests") ||
-		strings.Contains(text, "rate limit") ||
-		strings.Contains(text, "rate-limit") ||
-		strings.Contains(text, "ratelimit") ||
-		strings.Contains(text, "throttl") ||
-		strings.Contains(text, "temporarily blocked") ||
-		strings.Contains(text, "request has been blocked") ||
-		strings.Contains(text, "blocked") ||
-		strings.Contains(text, "访问被阻断")
 }
 
 func p123RateLimitError(res *resty.Response, code int, message string) error {

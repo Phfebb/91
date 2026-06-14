@@ -102,7 +102,8 @@ export function DrivesPage() {
           d.kind === "p123" ||
           d.kind === "onedrive" ||
           d.kind === "googledrive" ||
-          d.kind === "wopan"
+          d.kind === "wopan" ||
+          d.kind === "guangyapan"
       ),
     [list]
   );

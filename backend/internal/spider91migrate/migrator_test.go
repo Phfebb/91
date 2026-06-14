@@ -1464,7 +1464,7 @@ func TestAdaptUploadTargetSupportsWopanDriver(t *testing.T) {
 	}
 }
 
-// TestResolveTargetRejectsUnsupportedKind 验证当目标 drive 既不是 PikPak、115、123、OneDrive、Google Drive 也不是联通网盘时，
+// TestResolveTargetRejectsUnsupportedKind 验证当目标 drive 既不是 PikPak、115、123、OneDrive、Google Drive、联通网盘也不是光鸭网盘时，
 // resolveTarget 拒绝并返回 error，让 runOnce 静默跳过（不会做破坏性变更）。
 func TestResolveTargetRejectsUnsupportedKind(t *testing.T) {
 	cat := setupCatalog(t)

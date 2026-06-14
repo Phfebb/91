@@ -78,9 +78,9 @@ test("spider91 upload target uses explicit local-save option instead of auto tar
   assert.match(combinedSource, /本地保存，不上传/);
   assert.match(
     combinedSource,
-    /d\.kind === "pikpak"[\s\S]*d\.kind === "p115"[\s\S]*d\.kind === "p123"[\s\S]*d\.kind === "onedrive"[\s\S]*d\.kind === "googledrive"[\s\S]*d\.kind === "wopan"/
+    /d\.kind === "pikpak"[\s\S]*d\.kind === "p115"[\s\S]*d\.kind === "p123"[\s\S]*d\.kind === "onedrive"[\s\S]*d\.kind === "googledrive"[\s\S]*d\.kind === "wopan"[\s\S]*d\.kind === "guangyapan"/
   );
-  assert.match(crawlerPageSource, /UPLOAD_TARGET_KINDS[\s\S]*"wopan"/);
+  assert.match(crawlerPageSource, /UPLOAD_TARGET_KINDS[\s\S]*"wopan"[\s\S]*"guangyapan"/);
   assert.doesNotMatch(combinedSource, /自动：唯一/);
   assert.doesNotMatch(combinedSource, /自动模式/);
   assert.doesNotMatch(combinedSource, /较早的视频会上传到该云盘根目录下的 91 Spider 文件夹/);
@@ -175,6 +175,32 @@ test("pikpak drive form only exposes account login fields", () => {
   assert.doesNotMatch(fields, /key: "disable_media_link"/);
 });
 
+test("guangyapan drive form exposes qr login and token fields", () => {
+  assertDriveTypeOption("guangyapan", "光鸭网盘");
+  assert.match(driveFormSource, /GuangYaPanQRCodeLogin/);
+  assert.match(driveFormSource, /form\.kind === "guangyapan"/);
+  assert.match(apiSource, /startGuangYaPanQRLogin/);
+  assert.match(apiSource, /getGuangYaPanQRStatus/);
+
+  const match =
+    /case "guangyapan":\s*return \[([\s\S]*?)\];\s*case "onedrive":/.exec(
+      combinedSource
+    );
+  assert.ok(match, "guangyapan credential field block should be present");
+  const fields = match[1];
+
+  assert.match(fields, /key: "root_path"/);
+  assert.match(fields, /key: "refresh_token"/);
+  assert.match(fields, /key: "access_token"/);
+  assert.doesNotMatch(fields, /key: "phone_number"/);
+  assert.doesNotMatch(fields, /key: "send_code"/);
+  assert.doesNotMatch(fields, /key: "verify_code"/);
+  assert.doesNotMatch(fields, /key: "captcha_token"/);
+  assert.doesNotMatch(fields, /key: "client_id"/);
+  assert.doesNotMatch(fields, /key: "device_id"/);
+  assert.match(combinedSource, /if \(kind === "guangyapan"\) return ""/);
+});
+
 test("localstorage drive form asks for a server directory path", () => {
   assertDriveTypeOption("localstorage", "本地存储");
 
@@ -196,6 +222,7 @@ test("drive type selector keeps primary source order", () => {
     { value: "p115", label: "115 网盘" },
     { value: "p123", label: "123网盘" },
     { value: "pikpak", label: "PikPak" },
+    { value: "guangyapan", label: "光鸭网盘" },
     { value: "onedrive", label: "OneDrive" },
     { value: "googledrive", label: "Google Drive" },
     { value: "localstorage", label: "本地存储" },
@@ -264,6 +291,7 @@ test("drive cards use configured abbreviations and visible fallback icon colors"
   assert.match(drivesPageSource, /driveKindAbbr\(d\.kind\)/);
   assert.match(adminCss, /\.admin-drive-card__brand-icon\s*\{[^}]*background:\s*var\(--accent\);/s);
   assert.match(adminCss, /\.admin-drive-card__brand-icon\[data-kind="googledrive"\]\s*\{\s*background:\s*#4285f4;\s*\}/);
+  assert.match(adminCss, /\.admin-drive-card__brand-icon\[data-kind="guangyapan"\]\s*\{\s*background:\s*var\(--drive-guangyapan\);/);
 });
 
 test("drive management exposes stop task controls", () => {

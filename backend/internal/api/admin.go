@@ -21,6 +21,7 @@ import (
 
 	"github.com/video-site/backend/internal/auth"
 	"github.com/video-site/backend/internal/catalog"
+	"github.com/video-site/backend/internal/drives/guangyapan"
 	"github.com/video-site/backend/internal/drives/p123"
 	"github.com/video-site/backend/internal/drives/scriptcrawler"
 	"github.com/video-site/backend/internal/drives/spider91"
@@ -48,24 +49,24 @@ type AdminServer struct {
 	// LocalPreviewDir is the local directory that stores generated preview videos and thumbs.
 	LocalPreviewDir string
 	// Hooks：外层注入实际执行者
-	OnDriveSaved               func(driveID string) error
-	OnDriveDeleteCleanup       func(ctx context.Context, driveID string) (int, error)
-	OnDriveRemoved             func(driveID string)
-	OnScanRequested            func(driveID string) bool
-	OnStopDriveTasks           func(driveID string) bool
-	OnStopAllTasks             func() int
-	OnRegenPreview             func(videoID string)
-	OnRegenAllPreviews         func()
-	OnRegenFailedPreviews      func(driveID string)
-	OnRegenFailedThumbnails    func(driveID string)
-	OnRegenFailedFingerprints  func(driveID string)
+	OnDriveSaved              func(driveID string) error
+	OnDriveDeleteCleanup      func(ctx context.Context, driveID string) (int, error)
+	OnDriveRemoved            func(driveID string)
+	OnScanRequested           func(driveID string) bool
+	OnStopDriveTasks          func(driveID string) bool
+	OnStopAllTasks            func() int
+	OnRegenPreview            func(videoID string)
+	OnRegenAllPreviews        func()
+	OnRegenFailedPreviews     func(driveID string)
+	OnRegenFailedThumbnails   func(driveID string)
+	OnRegenFailedFingerprints func(driveID string)
 	// OnStartDriveTranscode 手动开启某盘的浏览器兼容性转码任务。
 	// 返回 (是否接受, 拒绝原因)。转码从不自动运行，只能在这里手动触发；
 	// 处理完候选列表后任务自然结束。
 	OnStartDriveTranscode func(driveID string) (bool, string)
 	// OnStopDriveTranscode 手动停止某盘正在进行的转码任务。返回是否有任务被停。
-	OnStopDriveTranscode func(driveID string) bool
-	OnDeleteVideo        func(ctx context.Context, videoID string, deleteSource bool) (DeleteVideoResult, error)
+	OnStopDriveTranscode       func(driveID string) bool
+	OnDeleteVideo              func(ctx context.Context, videoID string, deleteSource bool) (DeleteVideoResult, error)
 	GetDriveGenerationStatuses func() map[string]DriveGenerationStatuses
 	// OnTeaserEnabledChanged 在 per-drive 预览视频开关被切换后调用。
 	// enabled=true 时上层应该重新把 pending 预览视频入队（类似旧的全局开关从关到开）；
@@ -74,7 +75,7 @@ type AdminServer struct {
 	// Theme 读写（"dark" | "pink" | "sky"）
 	GetTheme func() string
 	SetTheme func(theme string) error
-	// Spider91 → 115/123/PikPak/OneDrive/Google Drive/联通网盘 上传目标 drive ID 读写
+	// Spider91 → 115/123/PikPak/OneDrive/Google Drive/联通网盘/光鸭网盘 上传目标 drive ID 读写
 	GetSpider91UploadDriveID func() string
 	SetSpider91UploadDriveID func(driveID string) error
 	// OnRunNightlyJob 触发一次完整的凌晨流水线（Phase1 扫盘 + Phase2 91 爬虫 +
@@ -94,6 +95,9 @@ type AdminServer struct {
 	// 联通网盘扫码登录接口测试注入；生产留空走官方 panservice.mail.wo.cn。
 	WopanQRAPIBaseURL string
 	WopanQRHTTPClient *http.Client
+	// 光鸭网盘扫码登录接口测试注入；生产留空走官方 account.guangyapan.com。
+	GuangYaPanAccountBaseURL string
+	GuangYaPanHTTPClient     *http.Client
 }
 
 const (
@@ -167,6 +171,8 @@ func (a *AdminServer) Register(r chi.Router) {
 			r.Get("/drives/p123/qr/{uniID}", a.handleP123QRStatus)
 			r.Post("/drives/wopan/qr", a.handleWopanQRStart)
 			r.Get("/drives/wopan/qr/{uuid}", a.handleWopanQRStatus)
+			r.Post("/drives/guangyapan/qr", a.handleGuangYaPanQRStart)
+			r.Get("/drives/guangyapan/qr/status", a.handleGuangYaPanQRStatus)
 			r.Delete("/drives/{id}", a.handleDeleteDrive)
 			r.Post("/drives/{id}/rescan", a.handleRescan)
 			r.Post("/drives/{id}/tasks/stop", a.handleStopDriveTasks)
@@ -471,11 +477,11 @@ func (a *AdminServer) handleListDrives(w http.ResponseWriter, r *http.Request) {
 		SkipDirIDs []string `json:"skipDirIds"`
 		// LastCrawlAt 是 spider91 上次成功爬取的 unix 秒（来自 credentials.last_crawl_at）。
 		// 其它 kind 留 0；前端用它显示"上次抓取: N 小时前"。
-		Spider91Proxy                 string           `json:"spider91Proxy,omitempty"`
-		LastCrawlAt                   int64            `json:"lastCrawlAt,omitempty"`
-		GoogleDriveUseOnlineAPI       *bool            `json:"googleDriveUseOnlineAPI,omitempty"`
+		Spider91Proxy           string `json:"spider91Proxy,omitempty"`
+		LastCrawlAt             int64  `json:"lastCrawlAt,omitempty"`
+		GoogleDriveUseOnlineAPI *bool  `json:"googleDriveUseOnlineAPI,omitempty"`
 		// STRMAllowOutsideRoot 是 localstorage 的 .strm 越root开关；其它 kind 省略。
-		STRMAllowOutsideRoot *bool `json:"strmAllowOutsideRoot,omitempty"`
+		STRMAllowOutsideRoot          *bool            `json:"strmAllowOutsideRoot,omitempty"`
 		ScanGenerationStatus          GenerationStatus `json:"scanGenerationStatus"`
 		ThumbnailGenerationStatus     GenerationStatus `json:"thumbnailGenerationStatus"`
 		PreviewGenerationStatus       GenerationStatus `json:"previewGenerationStatus"`
@@ -620,9 +626,9 @@ func (a *AdminServer) handleUpsertDrive(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		body.Credentials = credentials
-	} else if body.Kind == "googledrive" || body.Kind == "localstorage" {
-		// 按键合并、空值沿用旧值：localstorage 编辑表单里 path 留空表示不改，
-		// 但 strm_allow_outside_root 开关每次都会带值，必须逐键合并而不是整体替换。
+	} else if body.Kind == "googledrive" || body.Kind == "localstorage" || body.Kind == "guangyapan" {
+		// 按键合并、空值沿用旧值：这些网盘的编辑表单允许只改某几个字段，
+		// 其它 token / 路径 / 开关字段应保留旧值。
 		body.Credentials = mergeNonEmptyCredentials(existing, body.Credentials)
 	} else if len(body.Credentials) == 0 && existing != nil && len(existing.Credentials) > 0 {
 		body.Credentials = existing.Credentials
@@ -931,7 +937,7 @@ func (a *AdminServer) validateCrawlerUploadDrive(ctx context.Context, driveID st
 		return fmt.Errorf("上传目标网盘 %q 不存在", driveID)
 	}
 	if !isCrawlerUploadTargetKind(d.Kind) {
-		return fmt.Errorf("上传目标网盘 %q 类型为 %s，仅支持 115网盘、PikPak、123网盘、Google Drive、OneDrive、联通网盘", driveID, d.Kind)
+		return fmt.Errorf("上传目标网盘 %q 类型为 %s，仅支持 115网盘、PikPak、123网盘、Google Drive、OneDrive、联通网盘、光鸭网盘", driveID, d.Kind)
 	}
 	return nil
 }
@@ -1395,7 +1401,7 @@ func googleDriveUseOnlineAPIForDrive(d *catalog.Drive) *bool {
 }
 
 // mergeNonEmptyCredentials 逐键合并凭证：incoming 里非空的键覆盖旧值，
-// 空值/缺失的键沿用旧值。googledrive 和 localstorage 的编辑表单都依赖
+// 空值/缺失的键沿用旧值。googledrive、localstorage 和 guangyapan 的编辑表单都依赖
 // 这个语义（留空 = 不修改）。
 func mergeNonEmptyCredentials(existing *catalog.Drive, incoming map[string]string) map[string]string {
 	merged := map[string]string{}
@@ -1688,6 +1694,38 @@ func (a *AdminServer) handleWopanQRStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 	status, err := a.wopanQRClient().Poll(r.Context(), uuid)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (a *AdminServer) guangYaPanQRClient() *guangyapan.QRClient {
+	return guangyapan.NewQRClient(guangyapan.QRConfig{
+		AccountBaseURL: a.GuangYaPanAccountBaseURL,
+		HTTPClient:     a.GuangYaPanHTTPClient,
+	})
+}
+
+func (a *AdminServer) handleGuangYaPanQRStart(w http.ResponseWriter, r *http.Request) {
+	session, err := a.guangYaPanQRClient().Generate(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, session)
+}
+
+func (a *AdminServer) handleGuangYaPanQRStatus(w http.ResponseWriter, r *http.Request) {
+	deviceCode := r.URL.Query().Get("deviceCode")
+	if strings.TrimSpace(deviceCode) == "" {
+		http.Error(w, "deviceCode is required", http.StatusBadRequest)
+		return
+	}
+	status, err := a.guangYaPanQRClient().Poll(r.Context(), deviceCode)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err)
 		return

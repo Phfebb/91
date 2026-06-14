@@ -676,6 +676,12 @@
   color: var(--drive-wopan);
 }
 
+.vd-meta__chip[data-tone="guangyapan"] {
+  background: rgba(48, 195, 168, 0.14);
+  border-color: rgba(48, 195, 168, 0.3);
+  color: var(--drive-guangyapan);
+}
+
 .vd-meta__chip[data-tone="onedrive"] {
   background: rgba(76, 171, 234, 0.14);
   border-color: rgba(76, 171, 234, 0.3);

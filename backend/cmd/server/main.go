@@ -26,6 +26,7 @@ import (
 	"github.com/video-site/backend/internal/config"
 	"github.com/video-site/backend/internal/drives"
 	"github.com/video-site/backend/internal/drives/googledrive"
+	"github.com/video-site/backend/internal/drives/guangyapan"
 	"github.com/video-site/backend/internal/drives/localstorage"
 	"github.com/video-site/backend/internal/drives/localupload"
 	"github.com/video-site/backend/internal/drives/onedrive"
@@ -355,10 +356,10 @@ type App struct {
 	// 全站主题（"dark" | "pink" | "sky"），从 DB 读
 	theme string
 	// 显式指定的 spider91 上传目标 drive ID。
-	// 空字符串表示本地保存不上传，不再自动挑选 pikpak/p115/p123/onedrive/wopan drive。
+	// 空字符串表示本地保存不上传，不再自动挑选 pikpak/p115/p123/onedrive/wopan/guangyapan drive。
 	spider91UploadDriveID string
 
-	// spider91Migrator 把 spider91 视频上传到目标 drive（PikPak、115、123、OneDrive、Google Drive 或联通网盘）。
+	// spider91Migrator 把 spider91 视频上传到目标 drive（PikPak、115、123、OneDrive、Google Drive、联通网盘或光鸭网盘）。
 	spider91Migrator spider91MigrationRunner
 
 	// nightlyRunner 是凌晨流水线调度器：每天 cron_hour 串行跑扫盘 → 91 爬虫 → 迁移。
@@ -401,8 +402,9 @@ type App struct {
 }
 
 type driveScanProgress struct {
-	Scanned int
-	Added   int
+	Scanned       int
+	Added         int
+	CooldownUntil time.Time
 }
 
 type driveUploadProgress struct {
@@ -479,7 +481,7 @@ func (a *App) loadTheme(ctx context.Context) {
 }
 
 // Spider91UploadDriveID 返回当前配置的 spider91 上传目标 drive ID。
-// 空字符串表示本地保存不上传；只有管理员显式选择 pikpak/p115/p123/onedrive/googledrive/wopan drive 时才迁移上传。
+// 空字符串表示本地保存不上传；只有管理员显式选择 pikpak/p115/p123/onedrive/googledrive/wopan/guangyapan drive 时才迁移上传。
 func (a *App) Spider91UploadDriveID() string {
 	a.mu.Lock()
 	explicit := a.spider91UploadDriveID
@@ -496,7 +498,7 @@ func (a *App) Spider91UploadDriveID() string {
 
 // SetSpider91UploadDriveID 设置 spider91 上传目标 drive ID 并持久化。
 // 接受空字符串（本地保存不上传）。
-// 设置一个不存在或 kind 不是 pikpak / p115 / p123 / onedrive / googledrive / wopan 的 drive 会返回错误。
+// 设置一个不存在或 kind 不是 pikpak / p115 / p123 / onedrive / googledrive / wopan / guangyapan 的 drive 会返回错误。
 func (a *App) SetSpider91UploadDriveID(ctx context.Context, driveID string) error {
 	driveID = strings.TrimSpace(driveID)
 	if driveID != "" {
@@ -505,7 +507,7 @@ func (a *App) SetSpider91UploadDriveID(ctx context.Context, driveID string) erro
 			return fmt.Errorf("drive %q not found", driveID)
 		}
 		if !isSpider91UploadKind(d.Kind()) {
-			return fmt.Errorf("drive %q kind=%s, only pikpak, p115, p123, onedrive, googledrive or wopan can be spider91 upload target", driveID, d.Kind())
+			return fmt.Errorf("drive %q kind=%s, only pikpak, p115, p123, onedrive, googledrive, wopan or guangyapan can be spider91 upload target", driveID, d.Kind())
 		}
 	}
 	a.mu.Lock()
@@ -538,7 +540,7 @@ func formatOptionalRFC3339(t time.Time) string {
 // isSpider91UploadKind 是 spider91 迁移目标盘的 allowlist。
 // 与 spider91migrate.adaptUploadTarget 的支持范围保持一致。
 func isSpider91UploadKind(kind string) bool {
-	return kind == "pikpak" || kind == "p115" || kind == "p123" || kind == "onedrive" || kind == "googledrive" || kind == "wopan"
+	return kind == "pikpak" || kind == "p115" || kind == "p123" || kind == "onedrive" || kind == "googledrive" || kind == "wopan" || kind == guangyapan.Kind
 }
 
 // loadSpider91UploadDriveID 从 DB 读上传目标 drive ID 设置；不存在时使用空串。
@@ -595,16 +597,24 @@ func (a *App) driveGenerationStatuses() map[string]api.DriveGenerationStatuses {
 	a.transcodeMu.Unlock()
 
 	out := make(map[string]api.DriveGenerationStatuses, len(scanningDrives)+len(previewWorkers)+len(thumbWorkers)+len(fingerprintWorkers)+len(uploadProgresses)+len(transcodeWorkers))
+	now := time.Now()
 	for id, running := range scanningDrives {
 		if !running {
 			continue
 		}
 		progress := scanProgresses[id]
+		state := "scanning"
+		if progress.CooldownUntil.After(now) {
+			state = "cooling"
+		}
 		status := out[id]
 		status.Scan = api.GenerationStatus{
-			State:        "scanning",
+			State:        state,
 			ScannedCount: progress.Scanned,
 			AddedCount:   progress.Added,
+		}
+		if !progress.CooldownUntil.IsZero() {
+			status.Scan.CooldownUntil = progress.CooldownUntil.Format(time.RFC3339)
 		}
 		out[id] = status
 	}
@@ -961,6 +971,33 @@ func (a *App) attachDriveUnlocked(ctx context.Context, d *catalog.Drive) error {
 				_ = a.cat.UpsertDrive(ctx, d)
 			},
 		})
+	case guangyapan.Kind:
+		drv = guangyapan.New(guangyapan.Config{
+			ID:             d.ID,
+			RootID:         d.RootID,
+			RootPath:       d.Credentials["root_path"],
+			PhoneNumber:    d.Credentials["phone_number"],
+			CaptchaToken:   d.Credentials["captcha_token"],
+			SendCode:       parseBoolDefault(strings.TrimSpace(d.Credentials["send_code"]), false),
+			VerifyCode:     d.Credentials["verify_code"],
+			VerificationID: d.Credentials["verification_id"],
+			AccessToken:    d.Credentials["access_token"],
+			RefreshToken:   d.Credentials["refresh_token"],
+			ClientID:       d.Credentials["client_id"],
+			DeviceID:       d.Credentials["device_id"],
+			PageSize:       parseIntDefault(strings.TrimSpace(d.Credentials["page_size"]), 100),
+			OrderBy:        parseIntDefault(strings.TrimSpace(d.Credentials["order_by"]), 3),
+			SortType:       parseIntDefault(strings.TrimSpace(d.Credentials["sort_type"]), 1),
+			OnCredentialsUpdate: func(updated map[string]string) {
+				if d.Credentials == nil {
+					d.Credentials = make(map[string]string)
+				}
+				for k, v := range updated {
+					d.Credentials[k] = v
+				}
+				_ = a.cat.UpsertDrive(ctx, d)
+			},
+		})
 	case "onedrive":
 		drv = onedrive.New(onedrive.Config{
 			ID:           d.ID,
@@ -1081,7 +1118,7 @@ func generationCooldownForDrive(drv drives.Drive) time.Duration {
 		return 0
 	}
 	switch strings.ToLower(drv.Kind()) {
-	case "wopan":
+	case "wopan", "guangyapan":
 		return 10 * time.Minute
 	}
 	return 0
@@ -1107,7 +1144,7 @@ func fingerprintConfigForDrive(drv drives.Drive) fingerprint.Config {
 		return cfg
 	}
 	switch strings.ToLower(drv.Kind()) {
-	case "p115", "p123", "onedrive", "wopan":
+	case "p115", "p123", "onedrive", "wopan", "guangyapan":
 		cfg.RateLimitCooldown = 10 * time.Minute
 	case "pikpak":
 		cfg.RateLimitCooldown = 5 * time.Minute
@@ -1439,9 +1476,75 @@ func (a *App) updateDriveScanProgress(driveID string, scanned, added int) {
 		if a.scanProgress == nil {
 			a.scanProgress = make(map[string]driveScanProgress)
 		}
-		a.scanProgress[driveID] = driveScanProgress{Scanned: scanned, Added: added}
+		progress := a.scanProgress[driveID]
+		progress.Scanned = scanned
+		progress.Added = added
+		a.scanProgress[driveID] = progress
 	}
 	a.scanQueueMu.Unlock()
+}
+
+func (a *App) updateDriveScanCooldown(driveID string, until time.Time) {
+	driveID = strings.TrimSpace(driveID)
+	if driveID == "" {
+		return
+	}
+	a.scanQueueMu.Lock()
+	if a.scanQueued[driveID] {
+		if a.scanProgress == nil {
+			a.scanProgress = make(map[string]driveScanProgress)
+		}
+		progress := a.scanProgress[driveID]
+		progress.CooldownUntil = until
+		a.scanProgress[driveID] = progress
+	}
+	a.scanQueueMu.Unlock()
+}
+
+func (a *App) pauseDriveScanForRateLimit(ctx context.Context, driveID string, drv drives.Drive, err error) bool {
+	wait, ok := drives.RateLimitRetryAfter(err)
+	if !ok {
+		return false
+	}
+	if wait <= 0 {
+		wait = scanCooldownForDrive(drv)
+	}
+	if wait <= 0 {
+		wait = 5 * time.Minute
+	}
+	until := time.Now().Add(wait)
+	a.updateDriveScanCooldown(driveID, until)
+	log.Printf("[scan] drive=%s rate limited; cooling until=%s wait=%s: %v", driveID, until.Format(time.RFC3339), wait, err)
+	if !sleepDriveScanCooldown(ctx, wait) {
+		log.Printf("[scan] drive=%s cooldown canceled: %v", driveID, ctx.Err())
+	}
+	return true
+}
+
+func scanCooldownForDrive(drv drives.Drive) time.Duration {
+	if drv == nil {
+		return 5 * time.Minute
+	}
+	switch strings.ToLower(drv.Kind()) {
+	case "guangyapan":
+		return 10 * time.Minute
+	default:
+		return 5 * time.Minute
+	}
+}
+
+func sleepDriveScanCooldown(ctx context.Context, d time.Duration) bool {
+	if d <= 0 {
+		return true
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
 }
 
 func (a *App) driveHasActiveWork(driveID string) bool {
@@ -1908,6 +2011,8 @@ func (a *App) runScanWithTaskContext(ctx context.Context, driveID string) {
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			log.Printf("[scan] drive=%s canceled: %v", driveID, err)
+		} else if a.pauseDriveScanForRateLimit(ctx, driveID, drv, err) {
+			return
 		} else {
 			log.Printf("[scan] drive=%s error: %v", driveID, err)
 		}
@@ -3360,6 +3465,17 @@ func parseBoolDefault(raw string, def bool) bool {
 		return def
 	}
 	v, err := strconv.ParseBool(raw)
+	if err != nil {
+		return def
+	}
+	return v
+}
+
+func parseIntDefault(raw string, def int) int {
+	if raw == "" {
+		return def
+	}
+	v, err := strconv.Atoi(raw)
 	if err != nil {
 		return def
 	}

@@ -1068,6 +1068,8 @@ func driveKindLabel(kind string) string {
 		return "PikPak"
 	case "wopan":
 		return "联通网盘"
+	case "guangyapan":
+		return "光鸭网盘"
 	case "onedrive":
 		return "OneDrive"
 	case "googledrive":
