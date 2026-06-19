@@ -754,7 +754,7 @@ func TestHandleUpsertSpider91DriveIsRejected(t *testing.T) {
 		Credentials: map[string]string{
 			"last_crawl_at": "1800000000",
 			"proxy":         "http://old-proxy.local:7890",
-			"script_path":   "/opt/video-site-91/91VideoSpider/spider_91porn.py",
+			"script_path":   "/opt/video-site-91/data/crawler-scripts/legacy-spider.py",
 		},
 		Status: "ok",
 	}); err != nil {
