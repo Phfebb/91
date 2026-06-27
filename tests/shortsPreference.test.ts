@@ -263,19 +263,16 @@ test("shorts volume changes do not trigger playback control", () => {
   assert.match(shortsPageSource, /\}, \[muted, volume, items\.length\]\);/);
 });
 
-test("shorts fullscreen changes preserve the active slide", () => {
+test("shorts page defaults to immersive playback without fullscreen controls", () => {
   assert.match(shortsPageSource, /const activeIndexRef = useRef\(0\)/);
-  assert.match(shortsPageSource, /const ignoreIntersectionUntilRef = useRef\(0\)/);
-  assert.match(
-    shortsPageSource,
-    /if \(Date\.now\(\) < ignoreIntersectionUntilRef\.current\) return;/
-  );
-  assert.match(shortsPageSource, /function scheduleFullscreenActiveRestore\(\)/);
-  assert.match(shortsPageSource, /scheduleFullscreenActiveRestore\(\);\s*setIsFullscreen/);
-  assert.match(
-    shortsPageSource,
-    /function toggleFullscreen\(\) \{\s*scheduleFullscreenActiveRestore\(\);\s*if \(canRequestFullscreen\) \{/
-  );
-  assert.match(shortsPageSource, /if \(useDocumentScroll\) \{\s*restoreActiveSlideIntoView\(\);/);
-  assert.match(shortsPageSource, /scrollIntoView\(\{ block: "start", inline: "nearest", behavior: "auto" \}\)/);
+  assert.match(shortsCssSource, /\.shorts-page \{[\s\S]*height:\s*100svh/);
+  assert.match(shortsPageSource, /html\.style\.overflow = "hidden"/);
+  assert.match(shortsPageSource, /body\.style\.overflow = "hidden"/);
+  assert.match(shortsPageSource, /body\.style\.background = "#000"/);
+  assert.doesNotMatch(shortsPageSource, /Maximize/);
+  assert.doesNotMatch(shortsPageSource, /Minimize/);
+  assert.doesNotMatch(shortsPageSource, /aria-label=\{isFullscreen \? "退出全屏" : "进入全屏"\}/);
+  assert.doesNotMatch(shortsPageSource, /e\.key === "f"/);
+  assert.doesNotMatch(shortsPageSource, /requestFullscreen/);
+  assert.doesNotMatch(shortsPageSource, /exitFullscreen/);
 });

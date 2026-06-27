@@ -3,8 +3,6 @@ import { Link } from "react-router-dom";
 import {
   ChevronLeft,
   Heart,
-  Maximize,
-  Minimize,
   Volume2,
   VolumeX,
   EyeOff,
@@ -162,15 +160,10 @@ export default function ShortsPage() {
   const seenIdsRef = useRef<string[]>(loadSeenIds());
 
   const containerRef = useRef<HTMLDivElement | null>(null);
-  // 整个页面根元素，用于 requestFullscreen
-  const pageRef = useRef<HTMLDivElement | null>(null);
   // index → video element，用来精确控制播放/暂停
   const videoRefs = useRef<Map<number, HTMLVideoElement>>(new Map());
   const activeIndexRef = useRef(0);
   const userPausedIndexRef = useRef<number | null>(null);
-  const ignoreIntersectionUntilRef = useRef(0);
-  const fullscreenRestoreTimersRef = useRef<number[]>([]);
-  const fullscreenPointerHandledRef = useRef(false);
   const [activeReadyForPreload, setActiveReadyForPreload] = useState(false);
   const [userPausedIndex, setUserPausedIndexState] = useState<number | null>(null);
   const [cacheableSourceIds, setCacheableSourceIds] = useState<Set<string>>(
@@ -178,13 +171,8 @@ export default function ShortsPage() {
   );
   const [cacheWindowHighIndex, setCacheWindowHighIndex] = useState(-1);
 
-  // 当前是否处在浏览器全屏（Fullscreen API）状态。
-  // iPhone Safari 不支持网页元素级全屏；那种环境下改用页面滚动让浏览器栏随刷动收起。
+  // iPhone 浏览器里改用页面滚动，让 Safari 工具栏能随刷动收起。
   const useDocumentScroll = shouldUseDocumentScrollForShorts();
-  const [canRequestFullscreen, setCanRequestFullscreen] = useState(() =>
-    supportsElementFullscreenAPI()
-  );
-  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // 本次会话内已经点过赞的视频 id 集合。
   // 与后端的真实 likes 字段同步——后端是单纯计数器，前端在这里防重避免连发。
@@ -194,13 +182,6 @@ export default function ShortsPage() {
   useEffect(() => {
     activeIndexRef.current = activeIndex;
   }, [activeIndex]);
-
-  useEffect(() => {
-    const page = pageRef.current;
-    if (page && supportsElementFullscreenAPI(page)) {
-      setCanRequestFullscreen(true);
-    }
-  }, []);
 
   const updateUserPausedIndex = useCallback((index: number | null) => {
     userPausedIndexRef.current = index;
@@ -366,8 +347,6 @@ export default function ShortsPage() {
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (Date.now() < ignoreIntersectionUntilRef.current) return;
-
         let bestIndex = -1;
         let bestRatio = 0.6;
         for (const entry of entries) {
@@ -463,9 +442,6 @@ export default function ShortsPage() {
       } else if (e.key === "m" || e.key === "M") {
         e.preventDefault();
         handleVolumeButtonClick();
-      } else if (e.key === "f" || e.key === "F") {
-        e.preventDefault();
-        toggleFullscreen();
       } else if (e.key === "l" || e.key === "L") {
         e.preventDefault();
         const heartBtn = containerRef.current?.querySelector(`[data-index="${activeIndex}"] .shorts-slide__action`) as HTMLButtonElement | null;
@@ -493,7 +469,7 @@ export default function ShortsPage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeIndex, items, toggleFullscreen, showHud, handleVolumeButtonClick, setUserPausedForIndex]);
+  }, [activeIndex, items, showHud, handleVolumeButtonClick, setUserPausedForIndex]);
 
   // 页面卸载时暂停所有
   useEffect(() => {
@@ -566,135 +542,6 @@ export default function ShortsPage() {
     };
   }, [useDocumentScroll]);
 
-  function clearFullscreenRestoreTimers() {
-    for (const timer of fullscreenRestoreTimersRef.current) {
-      window.clearTimeout(timer);
-    }
-    fullscreenRestoreTimersRef.current = [];
-  }
-
-  function restoreActiveSlideIntoView() {
-    const idx = activeIndexRef.current;
-    const slide = containerRef.current?.querySelector<HTMLElement>(
-      `[data-index="${idx}"]`
-    );
-    if (!slide) return;
-    slide.scrollIntoView({ block: "start", inline: "nearest", behavior: "auto" });
-  }
-
-  function scheduleFullscreenActiveRestore() {
-    ignoreIntersectionUntilRef.current = Date.now() + 700;
-    clearFullscreenRestoreTimers();
-    restoreActiveSlideIntoView();
-    fullscreenRestoreTimersRef.current = [80, 220, 520].map((delay) =>
-      window.setTimeout(restoreActiveSlideIntoView, delay)
-    );
-  }
-
-  // ---- 浏览器全屏（Fullscreen API） ----
-  // 监听全屏状态变化，保持 React state 同步。
-  // 用户按 ESC / 系统返回 / 浏览器退出全屏按钮 时也会走这里。
-  useEffect(() => {
-    function handleChange() {
-      scheduleFullscreenActiveRestore();
-      setIsFullscreen(
-        document.fullscreenElement !== null ||
-          // Safari (desktop) 旧前缀
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (document as any).webkitFullscreenElement != null
-      );
-    }
-    document.addEventListener("fullscreenchange", handleChange);
-    document.addEventListener("webkitfullscreenchange", handleChange);
-    return () => {
-      document.removeEventListener("fullscreenchange", handleChange);
-      document.removeEventListener("webkitfullscreenchange", handleChange);
-      clearFullscreenRestoreTimers();
-    };
-  }, []);
-
-  // 路由离开 / 组件卸载时主动退出全屏，避免残留全屏态
-  useEffect(() => {
-    return () => {
-      try {
-        if (document.fullscreenElement) {
-          void document.exitFullscreen();
-        }
-      } catch {
-        // ignore
-      }
-    };
-  }, []);
-
-  function requestPageFullscreen() {
-    if (!canRequestFullscreen) return;
-    const page = pageRef.current;
-    if (!page) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const anyPage = page as any;
-    const fn: (() => Promise<void>) | undefined =
-      page.requestFullscreen?.bind(page) ||
-      anyPage.webkitRequestFullscreen?.bind(page);
-    if (!fn) return;
-    try {
-      const ret = fn();
-      if (ret && typeof ret.then === "function") {
-        ret.catch(() => {
-          // iOS Safari 或被拒绝：静默忽略，沉浸样式仍然生效
-        });
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  function exitPageFullscreen() {
-    try {
-      if (document.exitFullscreen) {
-        void document.exitFullscreen();
-      } else {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const anyDoc = document as any;
-        if (typeof anyDoc.webkitExitFullscreen === "function") {
-          anyDoc.webkitExitFullscreen();
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  function toggleFullscreen() {
-    scheduleFullscreenActiveRestore();
-    if (canRequestFullscreen) {
-      if (isFullscreen) exitPageFullscreen();
-      else requestPageFullscreen();
-      return;
-    }
-    if (useDocumentScroll) {
-      restoreActiveSlideIntoView();
-    }
-  }
-
-  function handleFullscreenButtonPointerDown(
-    e: React.PointerEvent<HTMLButtonElement>
-  ) {
-    e.preventDefault();
-    e.stopPropagation();
-    fullscreenPointerHandledRef.current = true;
-    toggleFullscreen();
-  }
-
-  function handleFullscreenButtonClick(e: React.MouseEvent<HTMLButtonElement>) {
-    e.preventDefault();
-    e.stopPropagation();
-    if (fullscreenPointerHandledRef.current) {
-      fullscreenPointerHandledRef.current = false;
-      return;
-    }
-    toggleFullscreen();
-  }
-
   const handleHideSuccess = useCallback((idx: number) => {
     showHud("已选择不再展示，正在滑至下一首...", <EyeOff size={16} />);
     const nextIdx = idx + 1;
@@ -713,23 +560,12 @@ export default function ShortsPage() {
   return (
     <div
       className={`shorts-page${useDocumentScroll ? " is-document-scroll" : ""}`}
-      ref={pageRef}
     >
       <header className="shorts-header">
         <Link to="/" className="shorts-header__back" aria-label="返回首页">
           <ChevronLeft size={22} />
         </Link>
         <div className="shorts-header__actions">
-          <button
-            type="button"
-            className="shorts-header__icon-btn"
-            aria-label={isFullscreen ? "退出全屏" : "进入全屏"}
-            onPointerDown={handleFullscreenButtonPointerDown}
-            onClick={handleFullscreenButtonClick}
-          >
-            {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
-          </button>
-          
           <div className="shorts-header__volume-group">
             <div className="shorts-header__volume-slider-container">
               <input
@@ -1682,17 +1518,6 @@ function isStandaloneDisplayMode() {
     nav.standalone === true ||
     window.matchMedia?.("(display-mode: standalone)").matches === true ||
     window.matchMedia?.("(display-mode: fullscreen)").matches === true
-  );
-}
-
-function supportsElementFullscreenAPI(target?: Element | null) {
-  if (typeof document === "undefined") return false;
-  const el = (target ?? document.documentElement) as HTMLElement & {
-    webkitRequestFullscreen?: () => Promise<void> | void;
-  };
-  return (
-    typeof el.requestFullscreen === "function" ||
-    typeof el.webkitRequestFullscreen === "function"
   );
 }
 

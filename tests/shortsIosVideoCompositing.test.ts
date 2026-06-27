@@ -30,16 +30,16 @@ test("shorts page wrapper is not position:fixed (breaks iOS <video> compositing)
   assert.match(pageRule[0], /height:\s*100svh/);
 });
 
-test("iPhone browser uses document scrolling and only explicit fullscreen", () => {
+test("iPhone browser uses document scrolling without manual fullscreen controls", () => {
   assert.match(shortsPageSource, /function shouldUseDocumentScrollForShorts\(\)/);
   assert.match(shortsPageSource, /function isIPhoneBrowserShell\(\)/);
   assert.match(shortsPageSource, /root:\s*null/);
-  assert.match(shortsPageSource, /supportsElementFullscreenAPI\(page\)/);
-  assert.match(shortsPageSource, /setCanRequestFullscreen\(true\)/);
-  assert.doesNotMatch(shortsPageSource, /showFullscreenButton/);
-  assert.match(shortsPageSource, /aria-label=\{isFullscreen \? "退出全屏" : "进入全屏"\}/);
-  assert.match(shortsPageSource, /function handleFullscreenButtonPointerDown/);
-  assert.match(shortsPageSource, /onPointerDown=\{handleFullscreenButtonPointerDown\}/);
+  assert.doesNotMatch(shortsPageSource, /supportsElementFullscreenAPI/);
+  assert.doesNotMatch(shortsPageSource, /requestFullscreen/);
+  assert.doesNotMatch(shortsPageSource, /exitFullscreen/);
+  assert.doesNotMatch(shortsPageSource, /aria-label=\{isFullscreen \? "退出全屏" : "进入全屏"\}/);
+  assert.doesNotMatch(shortsPageSource, /function handleFullscreenButtonPointerDown/);
+  assert.doesNotMatch(shortsPageSource, /onPointerDown=\{handleFullscreenButtonPointerDown\}/);
   assert.doesNotMatch(shortsPageSource, /onFirstPointer/);
   assert.doesNotMatch(shortsPageSource, /currentPage\.addEventListener\("pointerdown"/);
   assert.match(shortsCss, /html\.shorts-document-scroll[\s\S]*scroll-snap-type:\s*y mandatory/);
