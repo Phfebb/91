@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -560,7 +561,7 @@ func TestRunCrawlerMigrationAfterManualCrawlRequiresCrawlerUploadTarget(t *testi
 	}
 
 	app.runCrawlerMigrationAfterManualCrawl(ctx, "crawler-main")
-	if migrator.called != 0 {
+	if migrator.called.Load() != 0 {
 		t.Fatalf("migration called without upload target")
 	}
 
@@ -573,8 +574,8 @@ func TestRunCrawlerMigrationAfterManualCrawlRequiresCrawlerUploadTarget(t *testi
 		t.Fatalf("set upload target: %v", err)
 	}
 	app.runCrawlerMigrationAfterManualCrawl(ctx, "crawler-main")
-	if migrator.called != 1 {
-		t.Fatalf("migration calls = %d, want 1", migrator.called)
+	if migrator.called.Load() != 1 {
+		t.Fatalf("migration calls = %d, want 1", migrator.called.Load())
 	}
 }
 
@@ -617,10 +618,10 @@ func TestScheduleCrawlerUploadMigrationRunsForConfiguredCrawler(t *testing.T) {
 		t.Fatal("scheduleCrawlerUploadMigration returned false, want true")
 	}
 	deadline := time.After(time.Second)
-	for migrator.called == 0 {
+	for migrator.called.Load() == 0 {
 		select {
 		case <-deadline:
-			t.Fatalf("migration calls = %d, want 1", migrator.called)
+			t.Fatalf("migration calls = %d, want 1", migrator.called.Load())
 		case <-time.After(10 * time.Millisecond):
 		}
 	}
@@ -652,8 +653,8 @@ func TestScheduleCrawlerUploadMigrationSkipsWithoutUploadTarget(t *testing.T) {
 	if app.scheduleCrawlerUploadMigration(ctx, "crawler-local") {
 		t.Fatal("scheduleCrawlerUploadMigration returned true without upload target")
 	}
-	if migrator.called != 0 {
-		t.Fatalf("migration calls = %d, want 0", migrator.called)
+	if migrator.called.Load() != 0 {
+		t.Fatalf("migration calls = %d, want 0", migrator.called.Load())
 	}
 }
 
@@ -716,10 +717,10 @@ func TestScheduleManualCrawlerUploadMigrationRunsWhenAssetsReady(t *testing.T) {
 		t.Fatalf("accepted = false, message = %q", message)
 	}
 	deadline := time.After(time.Second)
-	for migrator.called == 0 {
+	for migrator.called.Load() == 0 {
 		select {
 		case <-deadline:
-			t.Fatalf("migration calls = %d, want 1", migrator.called)
+			t.Fatalf("migration calls = %d, want 1", migrator.called.Load())
 		case <-time.After(10 * time.Millisecond):
 		}
 	}
@@ -774,8 +775,8 @@ func TestScheduleManualCrawlerUploadMigrationRejectsPendingFingerprint(t *testin
 	if !strings.Contains(message, "指纹") {
 		t.Fatalf("message = %q, want fingerprint reason", message)
 	}
-	if migrator.called != 0 {
-		t.Fatalf("migration calls = %d, want 0", migrator.called)
+	if migrator.called.Load() != 0 {
+		t.Fatalf("migration calls = %d, want 0", migrator.called.Load())
 	}
 }
 
@@ -2466,11 +2467,11 @@ func (d *serverSourceRemovableFakeDrive) Remove(ctx context.Context, fileID stri
 }
 
 type serverFakeCrawlerUploadRunner struct {
-	called int
+	called atomic.Int32
 }
 
 func (r *serverFakeCrawlerUploadRunner) RunOnce(context.Context) error {
-	r.called++
+	r.called.Add(1)
 	return nil
 }
 
