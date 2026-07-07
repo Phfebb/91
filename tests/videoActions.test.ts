@@ -52,6 +52,14 @@ test("detail playback actions only expose delete as the management action", () =
   assert.doesNotMatch(detailPageSource, /onHideVideo/);
 });
 
+test("detail recommendations stay stable when returning from another video", () => {
+  assert.match(detailPageSource, /const cachedRelatedVideosByID = new Map<string, VideoDetail\["relatedVideos"\]>\(\)/);
+  assert.match(detailPageSource, /function withStableRelatedVideos\(detail: VideoDetail \| null\): VideoDetail \| null/);
+  assert.match(detailPageSource, /const stableDetail = withStableRelatedVideos\(d\)/);
+  assert.match(detailPageSource, /setDetail\(stableDetail\)/);
+  assert.doesNotMatch(detailPageSource, /setDetail\(d\)/);
+});
+
 test("detail delete dialog stays centered on mobile", () => {
   assert.match(
     detailCss,

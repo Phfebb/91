@@ -30,6 +30,7 @@ function useIsMobile() {
 // 模块级缓存：SPA 生命周期内保持，刷新页面时重置
 let cachedRanking: VideoItem[] | null = null;
 let cachedLatestPool: VideoItem[] | null = null;
+let cachedLatestBatch: VideoItem[] | null = null;
 
 function loadRecentHomeVideoIds(): string[] {
   try {
@@ -95,11 +96,17 @@ function nextLatestBatch(items: VideoItem[], count: number): VideoItem[] {
   return batch;
 }
 
+function cacheNextLatestBatch(items: VideoItem[], count: number): VideoItem[] {
+  const batch = nextLatestBatch(items, count);
+  cachedLatestBatch = batch;
+  return batch;
+}
+
 export default function HomePage() {
   const [rankingVideos, setRankingVideos] = useState<VideoItem[]>(cachedRanking ?? []);
-  const [latestVideos, setLatestVideos] = useState<VideoItem[]>([]);
+  const [latestVideos, setLatestVideos] = useState<VideoItem[]>(cachedLatestBatch ?? []);
   const [rankingLoading, setRankingLoading] = useState(cachedRanking === null);
-  const [latestLoading, setLatestLoading] = useState(cachedLatestPool === null);
+  const [latestLoading, setLatestLoading] = useState(cachedLatestBatch === null);
   const [refreshing, setRefreshing] = useState(false);
   const isMobile = useIsMobile();
 
@@ -117,8 +124,9 @@ export default function HomePage() {
     rememberHomeVideos(rankingItems);
     cachedRanking = rankingItems;
     cachedLatestPool = latestResult.items;
+    const latestBatch = cacheNextLatestBatch(latestResult.items, DESKTOP_COUNT);
     setRankingVideos(rankingItems);
-    setLatestVideos(nextLatestBatch(latestResult.items, DESKTOP_COUNT));
+    setLatestVideos(latestBatch);
     setRankingLoading(false);
     setLatestLoading(false);
     setRefreshing(false);
@@ -150,13 +158,13 @@ export default function HomePage() {
         .then((latestResult) => {
           if (!active) return;
           cachedLatestPool = latestResult.items;
-          setLatestVideos(nextLatestBatch(latestResult.items, DESKTOP_COUNT));
+          setLatestVideos(cacheNextLatestBatch(latestResult.items, DESKTOP_COUNT));
         })
         .finally(() => {
           if (active) setLatestLoading(false);
         });
     } else {
-      setLatestVideos(nextLatestBatch(cachedLatestPool, DESKTOP_COUNT));
+      setLatestVideos(cachedLatestBatch ?? cacheNextLatestBatch(cachedLatestPool, DESKTOP_COUNT));
       setLatestLoading(false);
     }
 

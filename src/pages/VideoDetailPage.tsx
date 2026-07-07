@@ -18,6 +18,26 @@ import { useAuth } from "@/admin/AuthContext";
 import { resolveVideoReturnPath } from "@/lib/videoReturnPath";
 import type { TagItem, VideoDetail, VideoSubtitle } from "@/types";
 
+const RELATED_CACHE_LIMIT = 80;
+const cachedRelatedVideosByID = new Map<string, VideoDetail["relatedVideos"]>();
+
+function rememberRelatedVideos(id: string, videos: VideoDetail["relatedVideos"]) {
+  if (cachedRelatedVideosByID.has(id)) return;
+  if (cachedRelatedVideosByID.size >= RELATED_CACHE_LIMIT) {
+    const oldestID = cachedRelatedVideosByID.keys().next().value;
+    if (oldestID) cachedRelatedVideosByID.delete(oldestID);
+  }
+  cachedRelatedVideosByID.set(id, videos);
+}
+
+function withStableRelatedVideos(detail: VideoDetail | null): VideoDetail | null {
+  if (!detail) return null;
+  const cached = cachedRelatedVideosByID.get(detail.id);
+  if (cached) return { ...detail, relatedVideos: cached };
+  rememberRelatedVideos(detail.id, detail.relatedVideos ?? []);
+  return detail;
+}
+
 export default function VideoDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -44,11 +64,12 @@ export default function VideoDetailPage() {
     Promise.all([fetchVideoDetail(id), fetchTags(), fetchVideoSubtitles(id)]).then(
       ([d, tagList, subtitleList]) => {
         if (!active) return;
-        setDetail(d);
+        const stableDetail = withStableRelatedVideos(d);
+        setDetail(stableDetail);
         setTags(tagList);
         setSubtitles(d ? subtitleList : []);
         setLoading(false);
-        document.title = d ? `${d.title} · 91` : "视频不存在";
+        document.title = stableDetail ? `${stableDetail.title} · 91` : "视频不存在";
       }
     );
     return () => {
