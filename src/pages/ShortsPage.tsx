@@ -44,6 +44,9 @@ const ACTIVE_PRELOAD_KEEP_SECONDS = 4;
 // 窗口内只要已经产生过可复用缓冲，就保留 src 复用浏览器缓存。
 const VIDEO_WINDOW_SIZE = 6;
 
+const SHORTS_SEEK_ACTIVATION_PX = 12;
+const SHORTS_SEEK_DIRECTION_LOCK_RATIO = 1.2;
+
 function loadSeenIds(): string[] {
   try {
     const raw = localStorage.getItem(SEEN_STORAGE_KEY);
@@ -698,10 +701,19 @@ type SlideProps = {
   showHud: (text: string, icon?: React.ReactNode) => void;
 };
 
+type ShortsTouchSeekState = {
+  startX: number;
+  startY: number;
+  startTime: number;
+  mode: "seek" | null;
+  targetTime: number;
+};
+
 /**
  * 一屏短视频。
  *
  * - 长按 ≥400ms 进入 2 倍速，松手恢复（与详情页 VideoPlayer 行为一致）
+ * - 横向滑动按当前播放点相对快进 / 快退，纵向滑动仍用于切换上下视频
  * - 单击切换播放 / 暂停
  * - 长按弹出的下载/分享菜单通过 contextmenu + CSS 屏蔽
  */
@@ -761,6 +773,7 @@ function ShortsSlide({
   // 300ms 内有第二次就当双击点赞，否则当单击 toggle play
   const clickTimerRef = useRef<number | null>(null);
   const lastClickAtRef = useRef(0);
+  const suppressNextClickRef = useRef(false);
 
   // 切换视频时把 likes 同步到新视频的初始值；
   // isLiked 取自父组件的全局集合，这样切走再切回 / 同一 id 重复出现仍能保持视觉态
@@ -953,6 +966,7 @@ function ShortsSlide({
     if (!video) return;
     let timer: number | null = null;
     let active = false;
+    let touchSeekState: ShortsTouchSeekState | null = null;
 
     const clearTimer = () => {
       if (timer !== null) {
@@ -980,14 +994,107 @@ function ShortsSlide({
       }
     };
 
-    const handleTouchStart = () => start();
+    const resetTouchSeek = () => {
+      if (touchSeekState?.mode === "seek") {
+        scrubbingRef.current = false;
+        setScrubbing(false);
+      }
+      touchSeekState = null;
+    };
+
+    const cancelFastForTouchSeek = () => {
+      clearTimer();
+      if (active) {
+        active = false;
+        video.playbackRate = 1;
+        setFastActive(false);
+      }
+    };
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1) return;
+      const touch = event.touches[0];
+      touchSeekState = {
+        startX: touch.clientX,
+        startY: touch.clientY,
+        startTime: video.currentTime || 0,
+        mode: null,
+        targetTime: video.currentTime || 0,
+      };
+      start();
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (!touchSeekState) return;
+      if (event.touches.length !== 1) {
+        resetTouchSeek();
+        end();
+        return;
+      }
+
+      const touch = event.touches[0];
+      const dx = touch.clientX - touchSeekState.startX;
+      const dy = touch.clientY - touchSeekState.startY;
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+
+      if (!touchSeekState.mode) {
+        if (absX < SHORTS_SEEK_ACTIVATION_PX && absY < SHORTS_SEEK_ACTIVATION_PX) {
+          return;
+        }
+        cancelFastForTouchSeek();
+        if (absX < absY * SHORTS_SEEK_DIRECTION_LOCK_RATIO) {
+          touchSeekState = null;
+          return;
+        }
+        touchSeekState.mode = "seek";
+        scrubbingRef.current = true;
+        setScrubbing(true);
+        clearClickTimer();
+      }
+
+      event.preventDefault();
+      const seekDuration = getSeekDuration(video);
+      if (!seekDuration) return;
+      const rect = video.getBoundingClientRect();
+      const next = clamp(
+        touchSeekState.startTime +
+          (dx / Math.max(1, rect.width)) * seekDuration,
+        0,
+        seekDuration
+      );
+      touchSeekState.targetTime = next;
+      setCurrentTime(next);
+      try {
+        video.currentTime = next;
+      } catch {
+        // ignore
+      }
+    };
+
+    const handleTouchEnd = (event: TouchEvent) => {
+      const wasSeeking = touchSeekState?.mode === "seek";
+      if (wasSeeking) {
+        event.preventDefault();
+        suppressNextClickRef.current = true;
+      }
+      resetTouchSeek();
+      end();
+    };
+
+    const handleTouchCancel = () => {
+      resetTouchSeek();
+      end();
+    };
+
     const handleMouseDown = (e: MouseEvent) => {
       if (e.button === 0) start();
     };
 
     video.addEventListener("touchstart", handleTouchStart, { passive: true });
-    video.addEventListener("touchend", end);
-    video.addEventListener("touchcancel", end);
+    video.addEventListener("touchmove", handleTouchMove, { passive: false });
+    video.addEventListener("touchend", handleTouchEnd);
+    video.addEventListener("touchcancel", handleTouchCancel);
     video.addEventListener("mousedown", handleMouseDown);
     video.addEventListener("mouseup", end);
     video.addEventListener("mouseleave", end);
@@ -996,9 +1103,11 @@ function ShortsSlide({
 
     return () => {
       clearTimer();
+      resetTouchSeek();
       video.removeEventListener("touchstart", handleTouchStart);
-      video.removeEventListener("touchend", end);
-      video.removeEventListener("touchcancel", end);
+      video.removeEventListener("touchmove", handleTouchMove);
+      video.removeEventListener("touchend", handleTouchEnd);
+      video.removeEventListener("touchcancel", handleTouchCancel);
       video.removeEventListener("mousedown", handleMouseDown);
       video.removeEventListener("mouseup", end);
       video.removeEventListener("mouseleave", end);
@@ -1040,6 +1149,13 @@ function ShortsSlide({
   function handleSlideClick(e: React.MouseEvent<HTMLElement>) {
     // 隐藏状态下不处理点击
     if (isMarkedHidden) return;
+    if (suppressNextClickRef.current) {
+      suppressNextClickRef.current = false;
+      clearClickTimer();
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
 
     const now = Date.now();
     const delta = now - lastClickAtRef.current;

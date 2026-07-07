@@ -97,9 +97,12 @@ const FAST_RATE = 2;
 const NORMAL_RATE = 1;
 /** ArtPlayer 内部播放失败自动重连次数。 */
 const ARTPLAYER_RECONNECT_TIME_MAX = 3;
+/** 键盘左右键单次快进/快退秒数。 */
+const KEYBOARD_SEEK_SECONDS = 15;
 
 Artplayer.FAST_FORWARD_VALUE = FAST_RATE;
 Artplayer.RECONNECT_TIME_MAX = ARTPLAYER_RECONNECT_TIME_MAX;
+Artplayer.SEEK_STEP = KEYBOARD_SEEK_SECONDS;
 
 const DEFAULT_SETTINGS: PlayerSettings = {
   volume: 0.7,
@@ -132,9 +135,6 @@ const BRIGHTNESS_MAX = 1.35;
 const GESTURE_ACTIVATION_PX = 12;
 const GESTURE_DIRECTION_LOCK_RATIO = 1.2;
 const GESTURE_VERTICAL_SCALE = 1.15;
-const GESTURE_SEEK_MIN_SECONDS = 30;
-const GESTURE_SEEK_MAX_SECONDS = 120;
-const GESTURE_SEEK_DURATION_RATIO = 0.12;
 const EMPTY_SUBTITLES: VideoSubtitle[] = [];
 const playerGestureHudTimers = new WeakMap<HTMLElement, number>();
 
@@ -1044,17 +1044,6 @@ function getPlayerBrightness(art: Artplayer) {
     : DEFAULT_SETTINGS.brightness;
 }
 
-function mobileGestureSeekSpan(duration: number) {
-  return Math.min(
-    duration,
-    clamp(
-      duration * GESTURE_SEEK_DURATION_RATIO,
-      GESTURE_SEEK_MIN_SECONDS,
-      GESTURE_SEEK_MAX_SECONDS
-    )
-  );
-}
-
 function seekGestureLabel(
   startTime: number,
   targetTime: number,
@@ -1393,9 +1382,8 @@ function bindMobilePlayerGestures(
     const duration = video.duration;
     if (!Number.isFinite(duration) || duration <= 0) return;
     const rect = player.getBoundingClientRect();
-    const span = mobileGestureSeekSpan(duration);
     const targetTime = clamp(
-      state.startTime + (dx / Math.max(1, rect.width)) * span,
+      state.startTime + (dx / Math.max(1, rect.width)) * duration,
       0,
       duration
     );

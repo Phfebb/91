@@ -39,6 +39,21 @@ test("shorts progress dragging uses immediate pointer state", () => {
   assert.match(shortsPageSource, /onLostPointerCapture=\{handleProgressPointerEnd\}/);
 });
 
+test("shorts horizontal video swipe seeks relative to the current playback time", () => {
+  assert.match(shortsPageSource, /const SHORTS_SEEK_ACTIVATION_PX = 12;/);
+  assert.match(shortsPageSource, /const SHORTS_SEEK_DIRECTION_LOCK_RATIO = 1\.2;/);
+  assert.match(shortsPageSource, /type ShortsTouchSeekState = \{/);
+  assert.match(shortsPageSource, /startTime: video\.currentTime \|\| 0/);
+  assert.match(shortsPageSource, /video\.addEventListener\("touchmove", handleTouchMove, \{ passive: false \}\);/);
+  assert.match(
+    shortsPageSource,
+    /touchSeekState\.startTime \+\s*\(dx \/ Math\.max\(1,\s*rect\.width\)\) \* seekDuration/
+  );
+  assert.match(shortsPageSource, /suppressNextClickRef\.current = true;/);
+  assert.match(shortsPageSource, /if \(suppressNextClickRef\.current\) \{/);
+  assert.doesNotMatch(shortsPageSource, /touch\.clientX - rect\.left\) \/ Math\.max\(1,\s*rect\.width\)/);
+});
+
 test("shorts progress listeners rebind when deferred videos mount", () => {
   assert.match(
     shortsPageSource,

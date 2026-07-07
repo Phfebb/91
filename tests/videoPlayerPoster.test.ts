@@ -148,6 +148,15 @@ test("detail video title uses a restrained size", () => {
 test("detail player uses custom mobile gestures instead of ArtPlayer native gestures", () => {
   assert.match(playerSource, /gesture:\s*false/);
   assert.match(playerSource, /fastForward:\s*false/);
+  assert.match(playerSource, /const KEYBOARD_SEEK_SECONDS = 15;/);
+  assert.match(playerSource, /Artplayer\.SEEK_STEP = KEYBOARD_SEEK_SECONDS;/);
+  assert.doesNotMatch(playerSource, /GESTURE_SEEK_MIN_SECONDS/);
+  assert.doesNotMatch(playerSource, /GESTURE_SEEK_MAX_SECONDS/);
+  assert.doesNotMatch(playerSource, /GESTURE_SEEK_DURATION_RATIO/);
+  assert.doesNotMatch(playerSource, /GESTURE_SEEK_SENSITIVITY/);
+  assert.match(playerSource, /handleSeekGesture\(event,\s*dx\)/);
+  assert.match(playerSource, /state\.startTime \+ \(dx \/ Math\.max\(1,\s*rect\.width\)\) \* duration/);
+  assert.doesNotMatch(playerSource, /event\.touches\[0\]\.clientX - rect\.left/);
   assert.match(playerSource, /function bindMobilePlayerGestures/);
   assert.match(playerSource, /let suppressNextClick = false/);
   assert.match(playerSource, /endPress\(true\)/);
