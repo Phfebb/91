@@ -69,7 +69,7 @@ export default function VideoDetailPage() {
         setTags(tagList);
         setSubtitles(d ? subtitleList : []);
         setLoading(false);
-        document.title = stableDetail ? `${stableDetail.title} · 91` : "视频不存在";
+        document.title = stableDetail ? stableDetail.title : "视频不存在";
       }
     );
     return () => {

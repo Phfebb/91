@@ -150,7 +150,7 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    document.title = activeSearchQuery ? `搜索 "${activeSearchQuery}" · 91` : "首页 · 91";
+    document.title = activeSearchQuery ? `搜索 "${activeSearchQuery}"` : "首页";
   }, [activeSearchQuery]);
 
   useEffect(() => {

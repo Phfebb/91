@@ -59,10 +59,10 @@ export default function ListingPage() {
 
   useEffect(() => {
     document.title = keyword
-      ? `搜索 "${keyword}" · 91`
+      ? `搜索 "${keyword}"`
       : tag
-      ? `标签 ${tag} · 91`
-      : "视频列表 · 91";
+      ? `标签 ${tag}`
+      : "视频列表";
 
     let active = true;
     const isInitialLoad = !hasLoadedListingRef.current;
