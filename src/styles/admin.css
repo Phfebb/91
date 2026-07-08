@@ -4383,7 +4383,7 @@
 /* =========================================================
  * Theme Page (外观)
  *
- * 两张主题预览卡，点击切换全站主题。每张卡内嵌一个迷你
+ * 主题预览卡，点击切换全站主题。每张卡内嵌一个迷你
  * "页面骨架"展示该主题的色彩。卡片内部的颜色用 data-preview
  * 强制锁定，不跟随当前主题，让用户能预览未选中的主题长什么样。
  * ========================================================= */
@@ -4391,34 +4391,15 @@
 .theme-page {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
-}
-
-.theme-page__head {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.theme-page__title {
-  font-size: var(--font-3xl);
-  font-weight: var(--weight-bold);
-  color: var(--text-strong);
-  letter-spacing: -0.01em;
-}
-
-.theme-page__sub {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: var(--font-md);
-  line-height: var(--line-relaxed);
-  max-width: 60ch;
+  gap: var(--space-4);
 }
 
 .theme-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: var(--space-5);
+  grid-template-columns: repeat(auto-fit, minmax(340px, 380px));
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-8);
 }
 
 /* 单张主题卡 */
@@ -4644,25 +4625,14 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-4) var(--space-5) var(--space-5);
+  padding: var(--space-4) var(--space-5);
   border-top: 1px solid var(--border-subtle);
 }
 
 .theme-card__head {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-}
-
-.theme-card__icon {
-  display: inline-grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  background: var(--accent-soft);
-  color: var(--accent);
-  flex: 0 0 auto;
+  gap: var(--space-2);
 }
 
 .theme-card__title-wrap {
@@ -4678,13 +4648,6 @@
   font-weight: var(--weight-bold);
   color: var(--text-strong);
   letter-spacing: -0.005em;
-}
-
-.theme-card__subtitle {
-  font-size: var(--font-xs);
-  color: var(--text-faint);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .theme-card__state {
@@ -4712,17 +4675,9 @@
   }
 }
 
-.theme-card__desc {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: var(--font-md);
-  line-height: var(--line-relaxed);
-}
-
 @media (max-width: 640px) {
   .theme-grid {
-    grid-template-columns: 1fr;
-    gap: var(--space-4);
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
