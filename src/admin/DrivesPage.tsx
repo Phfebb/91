@@ -740,7 +740,7 @@ export function DrivesPage() {
 
   // --- List view ---
   return (
-    <section className="admin-drives-page">
+    <section className="admin-drives-page admin-drives-page--list">
       <header className="admin-page__header">
         <div className="admin-page__actions admin-drive-list-actions">
           <div className="admin-task-controls" aria-label="所有网盘任务控制">
@@ -830,7 +830,9 @@ export function DrivesPage() {
             );
           })}
         </div>
-      ) : null}
+      ) : (
+        <div className="admin-drive-empty-state">请先添加网盘</div>
+      )}
 
       <Modal
         open={modalOpen}
