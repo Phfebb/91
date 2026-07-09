@@ -1108,3 +1108,25 @@ test("mobile admin top navigation stays compact", () => {
   assert.match(ruleBody(css, ".admin-main"), /padding\s*:\s*var\(--space-2\)\s+var\(--space-3\)\s+var\(--space-4\)/);
   assert.match(ruleBody(css, ".admin-page__header"), /margin-bottom\s*:\s*var\(--space-3\)/);
 });
+
+test("crawler header keeps preview toggle and add action aligned across breakpoints", () => {
+  const header = ruleBody(adminCss, ".admin-crawlers-page .admin-page__header");
+  const teaser = ruleBody(
+    adminCss,
+    ".admin-crawlers-page .admin-page__header > .admin-crawler-global-teaser"
+  );
+  const actions = ruleBody(
+    adminCss,
+    ".admin-crawlers-page .admin-page__header > .admin-crawler-page-actions"
+  );
+
+  assert.match(header, /align-items\s*:\s*flex-start/);
+  assert.match(header, /justify-content\s*:\s*space-between/);
+  assert.match(header, /flex-wrap\s*:\s*nowrap/);
+  assert.match(teaser, /width\s*:\s*auto/);
+  assert.match(teaser, /justify-items\s*:\s*start/);
+  assert.match(actions, /width\s*:\s*auto/);
+  assert.match(actions, /justify-content\s*:\s*flex-end/);
+  assert.match(actions, /margin-left\s*:\s*auto/);
+  assert.match(actions, /padding-top\s*:\s*14px/);
+});

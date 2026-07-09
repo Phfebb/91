@@ -433,6 +433,25 @@
   margin-left: auto;
 }
 
+.admin-crawlers-page .admin-page__header {
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+}
+
+.admin-crawlers-page .admin-page__header > .admin-crawler-global-teaser {
+  width: auto;
+  justify-items: start;
+}
+
+.admin-crawlers-page .admin-page__header > .admin-crawler-page-actions {
+  width: auto;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  margin-left: auto;
+  padding-top: 14px;
+}
+
 .admin-crawler-global-teaser {
   display: inline-grid;
   justify-items: center;
