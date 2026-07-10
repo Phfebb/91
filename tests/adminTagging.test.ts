@@ -14,10 +14,21 @@ const adminCss = readFileSync(
   new URL("../src/styles/admin.css", import.meta.url),
   "utf8"
 );
+const tokensCss = readFileSync(
+  new URL("../src/styles/tokens.css", import.meta.url),
+  "utf8"
+);
 const videosPageSource = readFileSync(
   new URL("../src/admin/VideosPage.tsx", import.meta.url),
   "utf8"
 );
+
+function ruleBody(css: string, selector: string): string {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = css.match(new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`));
+  assert.ok(match, `Expected CSS rule for ${selector}`);
+  return match[1];
+}
 
 test("admin tags keep builtin, user, and auto-generated tag management", () => {
   assert.match(apiSource, /export type TagMatchRules/);
@@ -189,15 +200,6 @@ test("admin tag dialogs use the lightweight modal style", () => {
   assert.match(adminCss, /\.admin-modal--tag-dialog \.admin-modal__footer\s*\{[^}]*border-top\s*:\s*0/s);
   assert.match(adminCss, /\.admin-modal--tag-create \.admin-modal__body\s*\{[^}]*padding-bottom\s*:\s*6px/s);
   assert.match(adminCss, /\.admin-modal--tag-create \.admin-modal__footer\s*\{[^}]*padding-top\s*:\s*6px/s);
-  assert.match(adminCss, /\.admin-tag-card__source-badge\s*\{[^}]*font-weight\s*:\s*400/s);
-  assert.match(adminCss, /\.admin-tag-card__source-badge\s*\{[^}]*background\s*:\s*var\(--tag-source-bg/s);
-  assert.doesNotMatch(adminCss, /\.admin-tag-card__source-badge\s*\{[^}]*box-shadow/s);
-  assert.doesNotMatch(adminCss, /--tag-source-border/);
-  assert.match(adminCss, /\.admin-tag-card__source-badge\[data-source="user"\]\s*\{[^}]*--tag-source-bg\s*:\s*rgba\(74,\s*222,\s*128,\s*0\.16\)/s);
-  assert.match(adminCss, /\.admin-tag-card__source-badge\[data-source="builtin"\]\s*\{[^}]*--tag-source-bg\s*:\s*rgba\(96,\s*165,\s*250,\s*0\.16\)/s);
-  assert.match(adminCss, /\.admin-tag-card__source-badge\[data-source="av"\]/);
-  assert.match(adminCss, /\.admin-tag-card__source-badge\[data-source="av"\][\s\S]*?--tag-source-bg\s*:\s*rgba\(251,\s*191,\s*36,\s*0\.17\)/s);
-  assert.match(adminCss, /\.admin-tag-card__source-badge\[data-source="crawler"\]\s*\{[^}]*--tag-source-bg\s*:\s*rgba\(196,\s*181,\s*253,\s*0\.18\)/s);
   assert.match(adminCss, /\.admin-tag-create-row\s*\{[^}]*position\s*:\s*relative/s);
   assert.match(adminCss, /\.admin-tag-create-warning\s*\{[^}]*color\s*:\s*var\(--danger\)/s);
   assert.match(adminCss, /\.admin-tag-create-warning\s*\{[^}]*position\s*:\s*absolute/s);
@@ -205,6 +207,45 @@ test("admin tag dialogs use the lightweight modal style", () => {
   assert.match(adminCss, /\.admin-tag-create-warning\s*\{[^}]*visibility\s*:\s*hidden/s);
   assert.match(adminCss, /\.admin-tag-create-warning\.is-visible\s*\{[^}]*visibility\s*:\s*visible/s);
   assert.match(adminCss, /\.admin-modal--tag-delete-confirm \.admin-confirm\s*\{[^}]*display\s*:\s*block/s);
+});
+
+test("admin tag source badges share one readable palette across themes", () => {
+  const badge = ruleBody(adminCss, ".admin-tag-card__source-badge");
+  const userBadge = ruleBody(adminCss, '.admin-tag-card__source-badge[data-source="user"]');
+  const builtinBadge = ruleBody(adminCss, '.admin-tag-card__source-badge[data-source="builtin"]');
+  const avBadge = ruleBody(adminCss, '.admin-tag-card__source-badge[data-source="generated"]');
+  const crawlerBadge = ruleBody(adminCss, '.admin-tag-card__source-badge[data-source="crawler"]');
+  const darkTokens = ruleBody(tokensCss, ':root[data-theme="dark"]');
+  const pinkTokens = ruleBody(tokensCss, ':root[data-theme="pink"]');
+  const skyTokens = ruleBody(tokensCss, ':root[data-theme="sky"]');
+
+  assert.match(badge, /font-weight\s*:\s*var\(--weight-medium\)/);
+  assert.match(badge, /background\s*:\s*var\(--tag-source-bg/);
+  assert.match(badge, /color\s*:\s*var\(--tag-source-fg/);
+  assert.doesNotMatch(badge, /box-shadow/);
+  assert.doesNotMatch(adminCss, /--tag-source-border/);
+  assert.doesNotMatch(adminCss, /:root\[data-theme="(?:pink|sky)"\] \.admin-tag-card__source-badge/);
+
+  assert.match(userBadge, /--tag-source-bg\s*:\s*var\(--tag-source-user-bg\)/);
+  assert.match(userBadge, /--tag-source-fg\s*:\s*var\(--tag-source-user-fg\)/);
+  assert.match(builtinBadge, /--tag-source-bg\s*:\s*var\(--tag-source-builtin-bg\)/);
+  assert.match(builtinBadge, /--tag-source-fg\s*:\s*var\(--tag-source-builtin-fg\)/);
+  assert.match(adminCss, /\.admin-tag-card__source-badge\[data-source="av"\],\s*\.admin-tag-card__source-badge\[data-source="generated"\]/s);
+  assert.match(avBadge, /--tag-source-bg\s*:\s*var\(--tag-source-av-bg\)/);
+  assert.match(avBadge, /--tag-source-fg\s*:\s*var\(--tag-source-av-fg\)/);
+  assert.match(crawlerBadge, /--tag-source-bg\s*:\s*var\(--tag-source-crawler-bg\)/);
+  assert.match(crawlerBadge, /--tag-source-fg\s*:\s*var\(--tag-source-crawler-fg\)/);
+
+  assert.match(darkTokens, /--tag-source-user-bg\s*:\s*#dff3ec/);
+  assert.match(darkTokens, /--tag-source-user-fg\s*:\s*#126b47/);
+  assert.match(darkTokens, /--tag-source-builtin-bg\s*:\s*#e3ecf9/);
+  assert.match(darkTokens, /--tag-source-builtin-fg\s*:\s*#245ca8/);
+  assert.match(darkTokens, /--tag-source-av-bg\s*:\s*#f9eddc/);
+  assert.match(darkTokens, /--tag-source-av-fg\s*:\s*#7a4a00/);
+  assert.match(darkTokens, /--tag-source-crawler-bg\s*:\s*#eeeafc/);
+  assert.match(darkTokens, /--tag-source-crawler-fg\s*:\s*#62429b/);
+  assert.doesNotMatch(pinkTokens, /--tag-source-/);
+  assert.doesNotMatch(skyTokens, /--tag-source-/);
 });
 
 test("admin tag edit dialog edits match rules directly", () => {

@@ -5966,30 +5966,30 @@
   font-size: 10px;
   padding: 2px 6px;
   border-radius: 4px;
-  font-weight: 400;
+  font-weight: var(--weight-medium);
   background: var(--tag-source-bg, rgba(255, 255, 255, 0.08));
   color: var(--tag-source-fg, var(--text-muted));
 }
 
 .admin-tag-card__source-badge[data-source="user"] {
-  --tag-source-bg: rgba(74, 222, 128, 0.16);
-  --tag-source-fg: #bbf7d0;
+  --tag-source-bg: var(--tag-source-user-bg);
+  --tag-source-fg: var(--tag-source-user-fg);
 }
 
 .admin-tag-card__source-badge[data-source="builtin"] {
-  --tag-source-bg: rgba(96, 165, 250, 0.16);
-  --tag-source-fg: #bfdbfe;
+  --tag-source-bg: var(--tag-source-builtin-bg);
+  --tag-source-fg: var(--tag-source-builtin-fg);
 }
 
 .admin-tag-card__source-badge[data-source="av"],
 .admin-tag-card__source-badge[data-source="generated"] {
-  --tag-source-bg: rgba(251, 191, 36, 0.17);
-  --tag-source-fg: #fde68a;
+  --tag-source-bg: var(--tag-source-av-bg);
+  --tag-source-fg: var(--tag-source-av-fg);
 }
 
 .admin-tag-card__source-badge[data-source="crawler"] {
-  --tag-source-bg: rgba(196, 181, 253, 0.18);
-  --tag-source-fg: #ddd6fe;
+  --tag-source-bg: var(--tag-source-crawler-bg);
+  --tag-source-fg: var(--tag-source-crawler-fg);
 }
 
 .admin-tag-card__footer {
