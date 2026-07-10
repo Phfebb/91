@@ -160,7 +160,9 @@ test("home page reserves tag cloud space while tags load and uses one empty libr
   assert.match(homePageSource, /variant="no-results"[\s\S]*?text="未查询到"[\s\S]*?className="admin-empty-state admin-empty-state--plain home-empty-state"/);
   assert.match(homePageSource, /<Pagination[\s\S]*?page=\{searchPage\}[\s\S]*?pageSize=\{HOME_SEARCH_PAGE_SIZE\}/);
   assert.match(homePageSource, /const hasAnyVideos = ranking\.length > 0 \|\| latest\.length > 0/);
-  assert.match(homePageSource, /const showEmptyHome = !homeLoading && !hasAnyVideos/);
+  assert.match(homePageSource, /const showEmptyHome = !homeLoading && !rankingError && !hasAnyVideos/);
+  assert.match(homePageSource, /const homeRequestVersion = useRef\(1\)/);
+  assert.match(homePageSource, /if \(requestVersion !== homeRequestVersion\.current\) return/);
   assert.match(homePageSource, /\{!hasActiveSearch && \(\s*hasAnyVideos \|\| hasActiveTag \? \(\s*<TagCloud linkBasePath="\/" onTagSelect=\{resetSearchResults\} \/>\s*\) : \(\s*<div className="tag-cloud-container is-reserved" aria-hidden="true" \/>\s*\)\s*\)\}/);
   assert.match(homePageSource, /<SectionHeader title="随机推荐" \/>/);
   assert.match(homePageSource, /<SectionHeader title="最新视频" \/>/);

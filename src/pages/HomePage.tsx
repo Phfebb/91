@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
@@ -41,9 +41,19 @@ function loadRecentHomeVideoIds(): string[] {
   try {
     const raw = window.localStorage.getItem(HOME_RECENT_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed)
-      ? parsed.filter((id): id is string => typeof id === "string" && id.length > 0)
-      : [];
+    if (!Array.isArray(parsed)) return [];
+
+    const seen = new Set<string>();
+    const recent: string[] = [];
+    for (const value of parsed) {
+      if (typeof value !== "string") continue;
+      const id = value.trim();
+      if (!id || id.length > 512 || seen.has(id)) continue;
+      seen.add(id);
+      recent.push(id);
+      if (recent.length >= HOME_RECENT_LIMIT) break;
+    }
+    return recent;
   } catch {
     return [];
   }
@@ -114,6 +124,7 @@ export default function HomePage() {
   const [rankingVideos, setRankingVideos] = useState<VideoItem[]>(cachedRanking ?? []);
   const [latestVideos, setLatestVideos] = useState<VideoItem[]>(cachedLatestBatch ?? []);
   const [rankingLoading, setRankingLoading] = useState(cachedRanking === null);
+  const [rankingError, setRankingError] = useState(false);
   const [latestLoading, setLatestLoading] = useState(cachedLatestBatch === null);
   const [refreshing, setRefreshing] = useState(false);
   const [searchPage, setSearchPage] = useState(1);
@@ -122,6 +133,7 @@ export default function HomePage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchSort, setSearchSort] = useState<SortKey>("hot");
   const [searchView, setSearchView] = useState<ViewMode>("grid");
+  const homeRequestVersion = useRef(1);
   const isMobile = useIsMobile();
 
   const resetSearchResults = useCallback(() => {
@@ -130,22 +142,33 @@ export default function HomePage() {
   }, []);
 
   const refreshHome = useCallback(async () => {
+    const requestVersion = ++homeRequestVersion.current;
     setRefreshing(true);
     setRankingLoading(true);
+    setRankingError(false);
     setLatestLoading(true);
 
     const excludeIds = loadRecentHomeVideoIds();
-    const [rankingItems, latestResult] = await Promise.all([
+    const [rankingResult, latestResult] = await Promise.allSettled([
       fetchHomeVideos(excludeIds),
       fetchListing(1, LATEST_POOL_SIZE, { sort: "latest", includeTotal: false }),
     ]);
+    if (requestVersion !== homeRequestVersion.current) return;
 
-    rememberHomeVideos(rankingItems);
-    cachedRanking = rankingItems;
-    cachedLatestPool = latestResult.items;
-    const latestBatch = cacheNextLatestBatch(latestResult.items, DESKTOP_COUNT);
-    setRankingVideos(rankingItems);
-    setLatestVideos(latestBatch);
+    if (rankingResult.status === "fulfilled") {
+      rememberHomeVideos(rankingResult.value);
+      cachedRanking = rankingResult.value;
+      setRankingVideos(rankingResult.value);
+    } else {
+      cachedRanking = null;
+      setRankingVideos([]);
+      setRankingError(true);
+    }
+    if (latestResult.status === "fulfilled") {
+      cachedLatestPool = latestResult.value.items;
+      const latestBatch = cacheNextLatestBatch(latestResult.value.items, DESKTOP_COUNT);
+      setLatestVideos(latestBatch);
+    }
     setRankingLoading(false);
     setLatestLoading(false);
     setRefreshing(false);
@@ -179,19 +202,29 @@ export default function HomePage() {
 
   useEffect(() => {
     let active = true;
+    const requestVersion = homeRequestVersion.current;
 
     if (cachedRanking === null) {
       setRankingLoading(true);
+      setRankingError(false);
       const excludeIds = loadRecentHomeVideoIds();
       fetchHomeVideos(excludeIds)
         .then((rankingItems) => {
-          if (!active) return;
+          if (!active || requestVersion !== homeRequestVersion.current) return;
           rememberHomeVideos(rankingItems);
           cachedRanking = rankingItems;
           setRankingVideos(rankingItems);
         })
+        .catch(() => {
+          if (!active || requestVersion !== homeRequestVersion.current) return;
+          cachedRanking = null;
+          setRankingVideos([]);
+          setRankingError(true);
+        })
         .finally(() => {
-          if (active) setRankingLoading(false);
+          if (active && requestVersion === homeRequestVersion.current) {
+            setRankingLoading(false);
+          }
         });
     }
 
@@ -199,12 +232,14 @@ export default function HomePage() {
       setLatestLoading(true);
       fetchListing(1, LATEST_POOL_SIZE, { sort: "latest", includeTotal: false })
         .then((latestResult) => {
-          if (!active) return;
+          if (!active || requestVersion !== homeRequestVersion.current) return;
           cachedLatestPool = latestResult.items;
           setLatestVideos(cacheNextLatestBatch(latestResult.items, DESKTOP_COUNT));
         })
         .finally(() => {
-          if (active) setLatestLoading(false);
+          if (active && requestVersion === homeRequestVersion.current) {
+            setLatestLoading(false);
+          }
         });
     } else {
       setLatestVideos(cachedLatestBatch ?? cacheNextLatestBatch(cachedLatestPool, DESKTOP_COUNT));
@@ -256,7 +291,7 @@ export default function HomePage() {
   const hasActiveFilter = hasActiveSearch || hasActiveTag;
   const searchTotalPages = Math.max(1, Math.ceil(searchTotal / HOME_SEARCH_PAGE_SIZE));
   const hasAnyVideos = ranking.length > 0 || latest.length > 0;
-  const showEmptyHome = !homeLoading && !hasAnyVideos;
+  const showEmptyHome = !homeLoading && !rankingError && !hasAnyVideos;
 
   return (
     <AppShell mobileAutoHideNav>
@@ -322,6 +357,7 @@ export default function HomePage() {
             <VideoGrid
               videos={ranking}
               loading={rankingLoading}
+              emptyText={rankingError ? "随机推荐加载失败，请刷新重试" : undefined}
               priorityCount={Math.min(4, displayCount)}
               skeletonCount={displayCount}
             />
