@@ -529,18 +529,56 @@ service_health_url() {
   printf 'http://127.0.0.1:%s/admin/api/setup' "$(listen_port_from_config)"
 }
 
+local_service_curl() {
+  # 健康检查只访问本机。显式忽略 ~/.curlrc 和所有代理设置，避免服务器为
+  # GitHub 下载配置 HTTP_PROXY/ALL_PROXY 后，127.0.0.1 也被错误发往代理。
+  curl --disable --noproxy '*' "$@"
+}
+
+report_service_readiness_failure() {
+  local port listeners=""
+  port="$(listen_port_from_config)"
+
+  if systemctl is-active --quiet "${SERVICE_NAME}.service"; then
+    warn "service process is active, but its local health endpoint is unreachable"
+  else
+    warn "service process is not active"
+  fi
+
+  if command -v ss >/dev/null 2>&1; then
+    listeners="$(
+      ss -ltnp 2>/dev/null \
+        | awk -v port="$port" '$4 ~ ":" port "$" {print}' \
+        || true
+    )"
+    if [[ -n "$listeners" ]]; then
+      warn "listener(s) found on port $port:"
+      printf '%s\n' "$listeners" >&2
+    else
+      warn "nothing is listening on port $port"
+    fi
+  fi
+}
+
 wait_for_service_ready() {
   local url deadline
   url="$(service_health_url)"
   deadline=$((SECONDS + SERVICE_READY_TIMEOUT))
   log "waiting for service at $url"
   while (( SECONDS < deadline )); do
-    if curl -fsS --connect-timeout 2 --max-time 5 "$url" >/dev/null 2>&1; then
+    if local_service_curl -fsS --connect-timeout 2 --max-time 5 "$url" >/dev/null 2>&1; then
       log "service is ready"
       return 0
     fi
     sleep 2
   done
+
+  warn "service readiness check timed out after ${SERVICE_READY_TIMEOUT}s: $url"
+  # 最后一次探测保留 curl 错误，避免 90 秒内完全没有可操作的诊断信息。
+  if local_service_curl -fsS --connect-timeout 2 --max-time 5 "$url" >/dev/null; then
+    log "service is ready"
+    return 0
+  fi
   return 1
 }
 
@@ -555,6 +593,7 @@ restart_service_ready() {
   fi
 
   warn "service failed to become ready"
+  report_service_readiness_failure
   systemctl --no-pager --full status "${SERVICE_NAME}.service" || true
   journalctl -u "${SERVICE_NAME}.service" -n 80 --no-pager || true
   return 1
@@ -685,7 +724,7 @@ install_app() {
   write_service
   install_cli
   open_firewall_port
-  restart_service_ready || die "service failed to start"
+  restart_service_ready || die "service readiness check failed; see diagnostics above"
   record_version
   show_success
 }
@@ -722,7 +761,7 @@ update_app() {
   fi
 
   if ! restart_service_ready; then
-    warn "new version failed to start; restoring previous files"
+    warn "new version failed its readiness check; restoring previous files"
     restore_install_files "$backup"
     restart_service_ready 2>/dev/null || true
     rm -rf "$backup"
@@ -905,7 +944,7 @@ main() {
       ;;
     restart)
       need_root "$@"
-      restart_service_ready || die "service failed to start"
+      restart_service_ready || die "service readiness check failed; see diagnostics above"
       ;;
     stop)
       need_root "$@"
