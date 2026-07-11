@@ -358,11 +358,19 @@ test("shorts preload grant uses high/low watermark hysteresis", () => {
   );
 });
 
-test("shorts commits viewed cursors and waits for queue end before starting a new feed", () => {
+test("shorts only advances viewed cursors and waits for queue end before starting a new feed", () => {
   assert.doesNotMatch(shortsPageSource, /seenIdsRef|saveSeenIds/);
   assert.match(
     shortsPageSource,
-    /saveShortsFeedState\(\{\s*feedToken: active\.feedToken,\s*cursor: active\.feedCursor,/
+    /const persistedFeedHighIndexRef = useRef\(-1\);/
+  );
+  assert.match(
+    shortsPageSource,
+    /if \(activeIndex > persistedFeedHighIndexRef\.current\) \{\s*persistedFeedHighIndexRef\.current = activeIndex;\s*saveShortsFeedState\(\{\s*feedToken: active\.feedToken,\s*cursor: active\.feedCursor,/
+  );
+  assert.doesNotMatch(
+    shortsPageSource,
+    /setCacheWindowHighIndex\(\(prev\) => Math\.max\(prev, activeIndex\)\);\s*saveShortsFeedState/
   );
   assert.match(
     shortsPageSource,

@@ -220,6 +220,9 @@ export default function ShortsPage() {
   const [initialFeedState] = useState(loadShortsFeedState);
   // 指向已经取到队列尾部的位置；只在内存中预取，不直接写 localStorage。
   const requestFeedRef = useRef<ShortsFeedState>(initialFeedState);
+  // 当前页面队列中已经写入续播书签的最远索引。回滑只用于回看，不能让
+  // localStorage 中的 token/cursor 倒退到旧视频或上一轮随机队列。
+  const persistedFeedHighIndexRef = useRef(-1);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const itemsLengthRef = useRef(items.length);
@@ -427,6 +430,7 @@ export default function ShortsPage() {
           // 否则末条视频的预取 effect 会持续请求同一个空库。
           setItems([]);
           setActiveIndex(0);
+          persistedFeedHighIndexRef.current = -1;
           setRoundComplete(false);
           requestFeedRef.current = EMPTY_SHORTS_FEED;
           clearShortsFeedState();
@@ -481,18 +485,21 @@ export default function ShortsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 只提交真正进入当前屏的视频游标。预取但尚未观看的条目不会被跳过，刷新
-  // 页面后会从当前视频之后恢复，而不是从已预取的队列末尾恢复。
+  // 只提交首次进入过的最远视频游标。预取不会跳过未观看条目；回滑也不会
+  // 让书签倒退。刷新页面后从本次实际到达过的最远视频之后恢复。
   useEffect(() => {
     if (empty) return;
     const active = items[activeIndex];
     if (!active) return;
 
     setCacheWindowHighIndex((prev) => Math.max(prev, activeIndex));
-    saveShortsFeedState({
-      feedToken: active.feedToken,
-      cursor: active.feedCursor,
-    });
+    if (activeIndex > persistedFeedHighIndexRef.current) {
+      persistedFeedHighIndexRef.current = activeIndex;
+      saveShortsFeedState({
+        feedToken: active.feedToken,
+        cursor: active.feedCursor,
+      });
+    }
 
     const remaining = items.length - 1 - activeIndex;
     if (remaining < PREFETCH_THRESHOLD && !loading && !loadError) {
