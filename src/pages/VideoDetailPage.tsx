@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { AppShell } from "@/components/AppShell";
 import { VideoPlayer } from "@/components/VideoPlayer";
@@ -53,7 +53,6 @@ export default function VideoDetailPage() {
   const [deleteSource, setDeleteSource] = useState(false);
   const [deleteSaving, setDeleteSaving] = useState(false);
   const [deleteError, setDeleteError] = useState("");
-  const detailTopRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -76,16 +75,6 @@ export default function VideoDetailPage() {
       active = false;
     };
   }, [id]);
-
-  useLayoutEffect(() => {
-    if (loading || !detail) return;
-    window.requestAnimationFrame(() => {
-      detailTopRef.current?.scrollIntoView({
-        block: "start",
-        behavior: "auto",
-      });
-    });
-  }, [loading, detail?.id]);
 
   async function handleTagsChange(nextTags: string[]) {
     if (!detail) return;
@@ -232,7 +221,7 @@ export default function VideoDetailPage() {
 
         <div className="container vd-page__inner">
           <div className="vd-layout">
-            <div className="vd-main" ref={detailTopRef}>
+            <div className="vd-main">
               <div className="vd-player-wrap">
                 <div className="vd-player">
                   <VideoPlayer

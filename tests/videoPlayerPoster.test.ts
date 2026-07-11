@@ -94,6 +94,50 @@ test("detail player limits ArtPlayer automatic reconnect attempts", () => {
   );
 });
 
+test("detail page stays at the document top after video data loads", () => {
+  assert.match(
+    detailPageSource,
+    /window\.scrollTo\(\{ top: 0, behavior: "auto" \}\)/
+  );
+  assert.doesNotMatch(detailPageSource, /scrollIntoView/);
+  assert.doesNotMatch(detailPageSource, /detailTopRef/);
+});
+
+test("detail page space hotkey works before player focus without hijacking controls", () => {
+  const keyboardStart = playerSource.indexOf("function bindPlayerKeyboardHotkeys");
+  const keyboardEnd = playerSource.indexOf(
+    "function shouldEnableMobileOrientationControl"
+  );
+  assert.ok(keyboardStart >= 0 && keyboardEnd > keyboardStart);
+  const keyboardBlock = playerSource.slice(keyboardStart, keyboardEnd);
+
+  assert.match(
+    keyboardBlock,
+    /document\.addEventListener\("keydown", handlePageSpaceKeyDown\)/
+  );
+  assert.match(
+    keyboardBlock,
+    /document\.removeEventListener\("keydown", handlePageSpaceKeyDown\)/
+  );
+  assert.match(
+    keyboardBlock,
+    /if \(event\.code !== "Space" && event\.key !== " "\) return;[\s\S]*?shouldIgnorePageSpaceHotkey\(event\)[\s\S]*?event\.preventDefault\(\);[\s\S]*?handleSpace\(event\)/
+  );
+  assert.doesNotMatch(keyboardBlock, /art\.hotkey\.add\("Space"/);
+  assert.match(
+    playerSource,
+    /const PLAYER_SPACE_HOTKEY_EXCLUDED_SELECTOR = \[[\s\S]*?"input"[\s\S]*?"button"[\s\S]*?"\[role='dialog'\]"/
+  );
+  assert.match(
+    keyboardBlock,
+    /document\.querySelector\(ACTIVE_MODAL_SELECTOR\)/
+  );
+  assert.match(
+    keyboardBlock,
+    /event\.defaultPrevented[\s\S]*?event\.isComposing[\s\S]*?event\.ctrlKey[\s\S]*?event\.metaKey/
+  );
+});
+
 test("detail player previews held arrow-key seeks and commits once on release", () => {
   const keyboardStart = playerSource.indexOf("function bindPlayerKeyboardHotkeys");
   const keyboardEnd = playerSource.indexOf(

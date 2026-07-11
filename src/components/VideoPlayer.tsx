@@ -130,6 +130,23 @@ const FAST_RATE_HINT_CLASS = "video-player__art-rate-hint";
 const PLAYER_GESTURE_HUD_CLASS = "video-player__art-gesture-hud";
 const PLAYER_GESTURE_HUD_ICON_CLASS = "video-player__art-gesture-hud-icon";
 const PLAYER_GESTURE_HUD_VALUE_CLASS = "video-player__art-gesture-hud-value";
+const PLAYER_SPACE_HOTKEY_EXCLUDED_SELECTOR = [
+  "input",
+  "textarea",
+  "select",
+  "button",
+  "a[href]",
+  "[contenteditable]:not([contenteditable='false'])",
+  "[role='button']",
+  "[role='textbox']",
+  "[role='combobox']",
+  "[role='slider']",
+  "[role='menuitem']",
+  "[role='option']",
+  "[role='dialog']",
+].join(",");
+const ACTIVE_MODAL_SELECTOR =
+  'dialog[open], [role="dialog"][aria-modal="true"]';
 const PREVIEW_WIDTH = 168;
 const MEDIA_REFERRER_POLICY = "no-referrer";
 const BRIGHTNESS_MIN = 0.45;
@@ -591,6 +608,16 @@ function bindPlayerKeyboardHotkeys(art: Artplayer) {
     previewKeyboardSeek(KEYBOARD_SEEK_SECONDS, "ArrowRight");
   };
 
+  function handlePageSpaceKeyDown(event: KeyboardEvent) {
+    if (event.code !== "Space" && event.key !== " ") return;
+    if (shouldIgnorePageSpaceHotkey(event)) return;
+
+    // ArtPlayer 的 hotkey 只有在播放器被点击后才生效。详情播放器挂载时
+    // 直接接管页面空格键，让首次按键也能播放，同时阻止浏览器翻页滚动。
+    event.preventDefault();
+    handleSpace(event);
+  }
+
   function handleKeyUp(event: KeyboardEvent) {
     if (event.code !== "ArrowLeft" && event.code !== "ArrowRight") return;
     if (keyboardSeekTarget === null) return;
@@ -611,13 +638,13 @@ function bindPlayerKeyboardHotkeys(art: Artplayer) {
   }
 
   art.hotkey.add("Escape", handleEscape);
-  art.hotkey.add("Space", handleSpace);
   art.hotkey.add("ArrowUp", handleArrowUp);
   art.hotkey.add("ArrowDown", handleArrowDown);
   art.hotkey.add("ArrowLeft", handleArrowLeft);
   art.hotkey.add("ArrowRight", handleArrowRight);
   art.on("video:timeupdate", handleTimeUpdate);
   art.on("blur", commitKeyboardSeek);
+  document.addEventListener("keydown", handlePageSpaceKeyDown);
   document.addEventListener("keyup", handleKeyUp);
   document.addEventListener("visibilitychange", handleVisibilityChange);
   window.addEventListener("blur", commitKeyboardSeek);
@@ -627,17 +654,39 @@ function bindPlayerKeyboardHotkeys(art: Artplayer) {
     keyboardSeekTarget = null;
     heldSeekKeys.clear();
     art.hotkey.remove("Escape", handleEscape);
-    art.hotkey.remove("Space", handleSpace);
     art.hotkey.remove("ArrowUp", handleArrowUp);
     art.hotkey.remove("ArrowDown", handleArrowDown);
     art.hotkey.remove("ArrowLeft", handleArrowLeft);
     art.hotkey.remove("ArrowRight", handleArrowRight);
     art.off("video:timeupdate", handleTimeUpdate);
     art.off("blur", commitKeyboardSeek);
+    document.removeEventListener("keydown", handlePageSpaceKeyDown);
     document.removeEventListener("keyup", handleKeyUp);
     document.removeEventListener("visibilitychange", handleVisibilityChange);
     window.removeEventListener("blur", commitKeyboardSeek);
   };
+}
+
+function shouldIgnorePageSpaceHotkey(event: KeyboardEvent) {
+  if (
+    event.defaultPrevented ||
+    event.isComposing ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey ||
+    event.shiftKey
+  ) {
+    return true;
+  }
+
+  // 弹窗打开但尚未把焦点移入弹窗时，也不能让空格控制背后的视频。
+  if (document.querySelector(ACTIVE_MODAL_SELECTOR)) return true;
+
+  return [event.target, document.activeElement].some(
+    (target) =>
+      target instanceof Element &&
+      target.closest(PLAYER_SPACE_HOTKEY_EXCLUDED_SELECTOR) !== null
+  );
 }
 
 function shouldEnableMobileOrientationControl() {
