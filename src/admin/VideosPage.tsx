@@ -115,8 +115,6 @@ function CurrentVideosTab({
   const [availableTags, setAvailableTags] = useState<api.AdminTag[]>([]);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [batchRegenOpen, setBatchRegenOpen] = useState(false);
-  const [batchRegening, setBatchRegening] = useState(false);
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [batchDeleteSource, setBatchDeleteSource] = useState(false);
@@ -140,7 +138,6 @@ function CurrentVideosTab({
       setTotal(r.total ?? 0);
       setAvailableTags(tagList);
       setDrives(driveList ?? []);
-      setSelectedIds(new Set());
     } catch (e) {
       const message = e instanceof Error ? e.message : "加载失败";
       setLoadError(message);
@@ -170,6 +167,10 @@ function CurrentVideosTab({
   useEffect(() => {
     setPage(1);
   }, [pageSize]);
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [searchKeyword]);
 
   useEffect(() => {
     if (keyword === searchKeyword) return;
@@ -216,6 +217,8 @@ function CurrentVideosTab({
   const placeholderRows = showPagination ? Math.max(0, pageSize - listItems.length) : 0;
   const hasActiveSearch = searchKeyword.trim().length > 0;
   const hasVideoActions = listItems.length > 0;
+  const allPageSelected =
+    listItems.length > 0 && listItems.every((video) => selectedIds.has(video.id));
 
   async function handleRegen(v: api.AdminVideo) {
     try {
@@ -227,43 +230,10 @@ function CurrentVideosTab({
     }
   }
 
-  async function handleBatchRegen() {
-    if (selectedIds.size === 0) return;
-    setBatchRegenOpen(true);
-  }
-
   async function handleBatchDelete() {
     if (selectedIds.size === 0) return;
     setBatchDeleteSource(false);
     setBatchDeleteOpen(true);
-  }
-
-  async function confirmBatchRegen() {
-    const ids = [...selectedIds];
-    const videoById = new Map(listItems.map((v) => [v.id, v]));
-    setBatchRegening(true);
-    let success = 0;
-    try {
-      const results = await Promise.allSettled(ids.map((id) => api.regenPreview(id)));
-      const acceptedVideos: api.AdminVideo[] = [];
-      results.forEach((r, index) => {
-        if (r.status === "fulfilled") {
-          const video = videoById.get(ids[index]);
-          if (video) acceptedVideos.push(video);
-          success++;
-        }
-      });
-      trackRegeneratingPreview(acceptedVideos);
-      show(
-        `批量触发完成，成功 ${success} / ${ids.length} 个`,
-        success === ids.length ? "success" : "info"
-      );
-      setSelectedIds(new Set());
-      setBatchRegenOpen(false);
-      setSelectMode(false);
-    } finally {
-      setBatchRegening(false);
-    }
   }
 
   function trackRegeneratingPreview(videos: api.AdminVideo[]) {
@@ -318,10 +288,12 @@ function CurrentVideosTab({
     try {
       let success = 0;
       let deletedSources = 0;
+      const deletedIds = new Set<string>();
       for (const id of ids) {
         try {
           const result = await api.deleteVideo(id, { deleteSource: batchDeleteSource });
           success++;
+          deletedIds.add(id);
           if (result.deletedSource) deletedSources++;
         } catch {
           // Keep deleting the rest of the selected videos; report aggregate failure below.
@@ -341,7 +313,9 @@ function CurrentVideosTab({
       setBatchDeleteOpen(false);
       setBatchDeleteSource(false);
       setSelectMode(false);
-      if (success >= listItems.length && page > 1) {
+      const currentPageEmptied =
+        listItems.length > 0 && listItems.every((video) => deletedIds.has(video.id));
+      if (currentPageEmptied && page > 1) {
         setPage((p) => Math.max(1, p - 1));
       } else {
         refresh();
@@ -352,10 +326,20 @@ function CurrentVideosTab({
   }
 
   const toggleSelect = (id: string) => {
-    const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSelectedIds(next);
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectPageVideos = () => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      listItems.forEach((video) => next.add(video.id));
+      return next;
+    });
   };
 
   const toggleSelectMode = () => {
@@ -393,18 +377,18 @@ function CurrentVideosTab({
             <button
               type="button"
               className="admin-btn admin-videos-bulk-actions__btn"
-              onClick={() => setSelectedIds(new Set())}
-              disabled={selectedIds.size === 0}
+              onClick={selectPageVideos}
+              disabled={listItems.length === 0 || allPageSelected}
             >
-              取消选中
+              全选本页
             </button>
             <button
               type="button"
               className="admin-btn admin-videos-bulk-actions__btn"
-              onClick={handleBatchRegen}
+              onClick={() => setSelectedIds(new Set())}
               disabled={selectedIds.size === 0}
             >
-              重生预览
+              取消选中
             </button>
             <button
               type="button"
@@ -534,17 +518,6 @@ function CurrentVideosTab({
         />
       )}
       <ConfirmModal
-        open={batchRegenOpen}
-        title="批量重生预览视频"
-        message={`确定要为当前页选中的 ${selectedIds.size} 个视频重新生成预览视频吗？`}
-        confirmText="确认重生"
-        loading={batchRegening}
-        onCancel={() => {
-          if (!batchRegening) setBatchRegenOpen(false);
-        }}
-        onConfirm={confirmBatchRegen}
-      />
-      <ConfirmModal
         open={deleteTarget !== null}
         title="删除视频"
         message={deleteTarget ? `确定要删除「${deleteTarget.title}」吗？` : ""}
@@ -566,7 +539,7 @@ function CurrentVideosTab({
       <ConfirmModal
         open={batchDeleteOpen}
         title="批量删除视频"
-        message={`确定要删除当前页选中的 ${selectedIds.size} 个视频吗？`}
+        message={`确定要删除已选中的 ${selectedIds.size} 个视频吗？`}
         confirmText="确认"
         danger
         centerMessage

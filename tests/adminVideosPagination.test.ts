@@ -126,6 +126,24 @@ test("admin videos batch delete runs deletions sequentially", () => {
   );
 });
 
+test("admin video selections persist across pages and can include the current page", () => {
+  const currentSource = videosPageSource.slice(
+    videosPageSource.indexOf("function CurrentVideosTab"),
+    videosPageSource.indexOf("// ---------- 拉黑视频 ----------")
+  );
+  const refreshSource = currentSource.slice(
+    currentSource.indexOf("async function refresh()"),
+    currentSource.indexOf("async function refreshListOnly()")
+  );
+
+  assert.doesNotMatch(refreshSource, /setSelectedIds\(new Set\(\)\)/);
+  assert.match(currentSource, /const selectPageVideos = \(\) => \{[\s\S]*?new Set\(current\)[\s\S]*?listItems\.forEach\(\(video\) => next\.add\(video\.id\)\)/);
+  assert.match(currentSource, /listItems\.every\(\(video\) => selectedIds\.has\(video\.id\)\)/);
+  assert.match(currentSource, /message=\{`确定要删除已选中的 \$\{selectedIds\.size\} 个视频吗？`\}/);
+  assert.match(currentSource, /listItems\.every\(\(video\) => deletedIds\.has\(video\.id\)\)/);
+  assert.doesNotMatch(currentSource, /success >= listItems\.length/);
+});
+
 test("admin videos track preview regeneration after it is accepted", () => {
   assert.match(videosPageSource, /const REGEN_PREVIEW_STATUS = "generating";/);
   assert.match(videosPageSource, /const \[regenPreviewById, setRegenPreviewById\]/);
