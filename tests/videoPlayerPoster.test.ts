@@ -309,6 +309,74 @@ test("detail player uses custom mobile gestures instead of ArtPlayer native gest
   assert.match(playerSource, /addEventListener\("touchmove", handleTouchMove, \{ passive: false \}\)/);
 });
 
+test("detail player auto-hides controls during mobile fullscreen playback", () => {
+  const helperStart = playerSource.indexOf(
+    "function bindMobileFullscreenControlAutoHide"
+  );
+  const helperEnd = playerSource.indexOf(
+    "function setPlayerFastRateHint",
+    helperStart
+  );
+  assert.ok(helperStart >= 0 && helperEnd > helperStart);
+  const helperBlock = playerSource.slice(helperStart, helperEnd);
+
+  assert.match(
+    playerSource,
+    /const ARTPLAYER_CONTROL_HIDE_TIME_MS = 2_000;/
+  );
+  assert.match(
+    playerSource,
+    /Artplayer\.CONTROL_HIDE_TIME = ARTPLAYER_CONTROL_HIDE_TIME_MS;/
+  );
+  assert.match(
+    playerSource,
+    /const unbindMobileFullscreenControlAutoHide =\s*bindMobileFullscreenControlAutoHide\(art\)/
+  );
+  assert.match(playerSource, /unbindMobileFullscreenControlAutoHide\(\)/);
+  assert.match(helperBlock, /if \(!isMobilePlaybackDevice\(\)\) return noop/);
+  assert.match(
+    helperBlock,
+    /!isPlayerExpanded\(art\) \|\| !art\.playing \|\| !art\.controls\.show/
+  );
+  assert.match(helperBlock, /Artplayer\.CONTROL_HIDE_TIME/);
+  assert.match(helperBlock, /art\.setting\.show/);
+  assert.match(helperBlock, /art\.isInput/);
+  assert.match(helperBlock, /classList\.contains\(FAST_RATE_CLASS\)/);
+  assert.match(helperBlock, /art\.controls\.show = false/);
+  assert.match(helperBlock, /art\.on\("fullscreen", handleExpandedChange\)/);
+  assert.match(helperBlock, /art\.on\("fullscreenWeb", handleExpandedChange\)/);
+  assert.match(helperBlock, /art\.on\("video:playing", scheduleHide\)/);
+  assert.match(helperBlock, /art\.on\("video:pause", clearHideTimer\)/);
+  assert.match(helperBlock, /art\.on\("control", handleControlChange\)/);
+  assert.match(helperBlock, /art\.on\("setting", handleSettingChange\)/);
+  assert.match(helperBlock, /art\.off\("fullscreen", handleExpandedChange\)/);
+  assert.match(helperBlock, /art\.off\("control", handleControlChange\)/);
+});
+
+test("detail player exits body-mounted web fullscreen before route cleanup", () => {
+  const mountStart = playerSource.indexOf("function mountArtPlayer");
+  const mountEnd = playerSource.indexOf(
+    "function bindPlayerKeyboardHotkeys",
+    mountStart
+  );
+  assert.ok(mountStart >= 0 && mountEnd > mountStart);
+  const mountBlock = playerSource.slice(mountStart, mountEnd);
+  const cleanupStart = mountBlock.lastIndexOf("return () => {");
+  assert.ok(cleanupStart >= 0);
+  const cleanupBlock = mountBlock.slice(cleanupStart);
+  const exitFullscreenIndex = cleanupBlock.indexOf(
+    "if (art.fullscreenWeb) art.fullscreenWeb = false"
+  );
+  const destroyIndex = cleanupBlock.indexOf("art.destroy(true)");
+
+  assert.ok(exitFullscreenIndex >= 0);
+  assert.ok(destroyIndex > exitFullscreenIndex);
+  assert.match(
+    cleanupBlock,
+    /if \(art\.fullscreenWeb\) art\.fullscreenWeb = false;[\s\S]*art\.destroy\(true\)/
+  );
+});
+
 test("detail player hides orientation control on iPhone without disabling mobile gestures", () => {
   assert.match(playerSource, /controls:\s*enableOrientationControl \? \[createOrientationControl\(\)\] : \[\]/);
   assert.match(playerSource, /function shouldEnableMobileOrientationControl\(\)\s*\{\s*return isMobilePlaybackDevice\(\) && !isApplePhoneDevice\(\);/);
