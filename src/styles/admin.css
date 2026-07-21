@@ -353,6 +353,11 @@
     width: 100%;
   }
 
+  .admin-drive-list-actions .admin-btn {
+    background: var(--bg-surface);
+    border-color: var(--border-subtle);
+  }
+
   .admin-task-controls {
     width: 100%;
   }
@@ -3227,6 +3232,18 @@
     transform: translateY(-50%);
   }
 
+  .admin-nav__group:not(.admin-nav__group--home) + .admin-nav__group > .admin-nav__link:first-of-type::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: -4px;
+    width: 1px;
+    height: 18px;
+    background: var(--border-subtle);
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+
   .admin-nav__text {
     display: inline-flex;
     gap: 0;
@@ -3246,7 +3263,7 @@
     color: var(--text-strong);
     background: var(--accent-soft);
     border-color: var(--border-accent);
-    box-shadow: 0 2px 8px var(--accent-glow);
+    box-shadow: none;
   }
 
   .admin-nav__link.is-active::before { display: none; }

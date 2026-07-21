@@ -409,15 +409,23 @@ test("admin sidebar active item frame only wraps the centered option", () => {
   assert.match(activeMarker, /display\s*:\s*none/);
 });
 
-test("admin sidebar separates adjacent options within the same group", () => {
+test("admin sidebar separates adjacent options across every mobile group", () => {
   assert.match(
     adminCss,
     /\.admin-nav__group > \.admin-nav__link \+ \.admin-nav__link::after\s*\{[^}]*content\s*:\s*"";[^}]*height\s*:\s*1px;[^}]*background\s*:\s*var\(--border-subtle\)/s
   );
   const css = mobileCss();
   const mobileSeparator = ruleBody(css, ".admin-nav__group > .admin-nav__link + .admin-nav__link::after");
+  const mobileGroupSeparator = ruleBody(
+    css,
+    ".admin-nav__group:not(.admin-nav__group--home) + .admin-nav__group > .admin-nav__link:first-of-type::after"
+  );
   assert.match(mobileSeparator, /width\s*:\s*1px/);
   assert.match(mobileSeparator, /height\s*:\s*18px/);
+  assert.match(mobileGroupSeparator, /content\s*:\s*""/);
+  assert.match(mobileGroupSeparator, /width\s*:\s*1px/);
+  assert.match(mobileGroupSeparator, /height\s*:\s*18px/);
+  assert.match(mobileGroupSeparator, /background\s*:\s*var\(--border-subtle\)/);
 });
 
 test("current video list does not render the drive summary under filters", () => {
@@ -1177,6 +1185,7 @@ test("mobile tags management does not create horizontal page overflow", () => {
 
 test("mobile admin top navigation stays compact", () => {
   const css = mobileCss();
+  const activeNavLink = ruleBody(css, ".admin-nav__link.is-active");
 
   assert.match(ruleBody(css, ".admin-shell"), /display\s*:\s*flex/);
   assert.match(ruleBody(css, ".admin-shell"), /flex-direction\s*:\s*column/);
@@ -1216,6 +1225,9 @@ test("mobile admin top navigation stays compact", () => {
   assert.match(ruleBody(css, ".admin-nav__link"), /flex\s*:\s*0\s+0\s+auto/);
   assert.match(ruleBody(css, ".admin-nav__icon"), /display\s*:\s*inline-flex/);
   assert.match(ruleBody(css, ".admin-nav__icon"), /width\s*:\s*16px/);
+  assert.match(activeNavLink, /background\s*:\s*var\(--accent-soft\)/);
+  assert.match(activeNavLink, /border-color\s*:\s*var\(--border-accent\)/);
+  assert.match(activeNavLink, /box-shadow\s*:\s*none/);
   assert.match(ruleBody(css, ".admin-nav__action"), /display\s*:\s*none/);
   assert.match(ruleBody(css, ".admin-nav .admin-nav__action"), /display\s*:\s*none/);
   assert.match(ruleBody(css, ".admin-main"), /padding\s*:\s*var\(--space-2\)\s+var\(--space-3\)\s+var\(--space-4\)/);

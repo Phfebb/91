@@ -418,8 +418,9 @@ test("drive form required fields use save-time prompts instead of label stars", 
 test("crawler management is a separate admin section", () => {
   assert.match(adminLayoutSource, /to="\/admin\/crawlers"/);
   assert.match(adminLayoutSource, /admin-nav__title">爬虫管理/);
-  assert.match(adminLayoutSource, /<Bot size=\{15\} \/>/);
-  assert.doesNotMatch(adminLayoutSource, /SpiderIcon/);
+  assert.match(adminLayoutSource, /import \{ SpiderIcon \} from "\.\/icons\/SpiderIcon";/);
+  assert.match(adminLayoutSource, /<SpiderIcon size=\{15\} \/>/);
+  assert.doesNotMatch(adminLayoutSource, /<Bot\b/);
   assert.match(
     appSource,
     /path="crawlers"[\s\S]*<PageSuspense>[\s\S]*<CrawlersPage \/>[\s\S]*<\/PageSuspense>/
@@ -772,6 +773,10 @@ test("drive list actions use ordinary text buttons in the requested positions", 
     /title=\{form\.id && list\.find\(\(x\) => x\.id === form\.id\) \? "编辑网盘" : "添加网盘"\}/
   );
   assert.match(adminCss, /\.admin-drive-list-actions\s*\{[^}]*justify-content\s*:\s*space-between/s);
+  assert.match(
+    adminCss,
+    /@media \(max-width: 640px\)\s*\{[\s\S]*?\.admin-drive-list-actions \.admin-btn\s*\{[^}]*background\s*:\s*var\(--bg-surface\);[^}]*border-color\s*:\s*var\(--border-subtle\)/s
+  );
   assert.doesNotMatch(adminCss, /\.admin-drive-footer-actions/);
 });
 

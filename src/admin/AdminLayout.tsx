@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
-  Bot,
   Film,
   HardDrive,
   Home,
@@ -14,6 +13,7 @@ import * as api from "./api";
 import { useAuth } from "./AuthContext";
 import { useToast } from "./ToastContext";
 import { Modal } from "./Modal";
+import { SpiderIcon } from "./icons/SpiderIcon";
 
 export function AdminLayout() {
   const { logout } = useAuth();
@@ -106,7 +106,7 @@ export function AdminLayout() {
               }
             >
               <span className="admin-nav__icon" aria-hidden="true">
-                <Bot size={15} />
+                <SpiderIcon size={15} />
               </span>
               <span className="admin-nav__text">
                 <span className="admin-nav__title">爬虫管理</span>
