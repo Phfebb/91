@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Pencil, Tag, X } from "lucide-react";
+import { useDocumentScrollLock } from "@/lib/useDocumentScrollLock";
 import type { TagItem, VideoDetail } from "@/types";
 
 type Props = {
@@ -32,6 +33,8 @@ export function VideoInfoPanel({
   const [descExpanded, setDescExpanded] = useState(false);
   const tagEditorTitleId = useId();
   const tagEditorRef = useRef<HTMLDivElement | null>(null);
+
+  useDocumentScrollLock(editingTags);
 
   const tags = video.tags ?? [];
   const description = (video.description ?? "").trim();

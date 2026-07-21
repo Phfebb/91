@@ -20,6 +20,7 @@ import {
   updateVideoTags,
 } from "@/data/videos";
 import { useAuth } from "@/admin/AuthContext";
+import { useDocumentScrollLock } from "@/lib/useDocumentScrollLock";
 import { resolveVideoReturnPath } from "@/lib/videoReturnPath";
 import type { TagItem, VideoDetail, VideoSubtitle } from "@/types";
 
@@ -122,6 +123,8 @@ function VideoDetailContent({ id }: { id?: string }) {
   const [deleteSource, setDeleteSource] = useState(false);
   const [deleteSaving, setDeleteSaving] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+
+  useDocumentScrollLock(deleteOpen && isAdmin);
 
   useEffect(() => {
     if (!id) {

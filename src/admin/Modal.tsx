@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import { useDocumentScrollLock } from "@/lib/useDocumentScrollLock";
 
 type Props = {
   open: boolean;
@@ -27,6 +28,8 @@ export function Modal({
   const onCloseRef = useRef(onClose);
   const restoreFocusRef = useRef(restoreFocus);
   const titleId = useId();
+
+  useDocumentScrollLock(open);
 
   useEffect(() => {
     onCloseRef.current = onClose;
