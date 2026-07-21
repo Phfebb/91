@@ -255,15 +255,57 @@ test("mobile user management cards keep identity, metadata, and actions separate
   );
 });
 
-test("admin video management omits drive filters and page title", () => {
+test("admin video management uses a modal advanced filter without a page title", () => {
+  const desktopRange = ruleBody(adminCss, ".admin-modal--video-filters .admin-video-advanced-range");
+  const desktopRangeInputs = ruleBody(adminCss, ".admin-modal--video-filters .admin-video-advanced-range__inputs");
+  const desktopRangeControls = ruleBodyByContains(
+    adminCss,
+    '.admin-modal--video-filters .admin-video-advanced-range input[type="date"]'
+  );
+
   assert.match(videosPageSource, /\{ key: "current", label: "正常视频" \}/);
   assert.doesNotMatch(videosPageSource, /\{ key: "current", label: "当前视频" \}/);
   assert.doesNotMatch(videosPageSource, /function DriveFilter/);
   assert.doesNotMatch(videosPageSource, /admin-videos-filter__select/);
   assert.doesNotMatch(videosPageSource, /<h1 className="admin-page__title">视频管理<\/h1>/);
   assert.doesNotMatch(videosPageSource, /const \[driveId, setDriveId\]/);
+  assert.match(videosPageSource, /className="admin-videos-filter__current-actions"/);
+  assert.match(videosPageSource, /className="admin-btn admin-video-advanced-toggle"/);
+  assert.doesNotMatch(videosPageSource, /SlidersHorizontal/);
+  assert.match(videosPageSource, /aria-haspopup="dialog"/);
+  assert.match(videosPageSource, /<Modal[\s\S]*?open=\{advancedFiltersOpen\}[\s\S]*?title="高级筛选"[\s\S]*?className="admin-modal--video-filters"/);
+  assert.match(videosPageSource, /function AdvancedVideoFilters/);
+  assert.match(videosPageSource, /function VideoSourcePicker/);
+  assert.match(videosPageSource, /<span>来源<\/span>/);
+  assert.match(videosPageSource, /className="admin-video-source-picker__trigger"/);
+  assert.match(videosPageSource, /role="listbox" aria-label="来源"/);
+  assert.match(videosPageSource, /role="group" aria-label="网盘"/);
+  assert.match(videosPageSource, /role="group" aria-label="爬虫"/);
+  assert.doesNotMatch(videosPageSource, /<optgroup|<option value="">全部来源/);
   assert.doesNotMatch(videosPageSource, /getVideoStats|admin-video-tab__count/);
   assert.doesNotMatch(adminCss, /admin-videos-filter__select/);
+  assert.match(adminCss, /\.admin-video-advanced-toggle\s*\{/);
+  assert.doesNotMatch(adminCss, /\.admin-video-advanced-toggle\.is-active/);
+  assert.match(adminCss, /\.admin-modal\.admin-modal--video-filters\s*\{/);
+  assert.match(adminCss, /\.admin-modal\.admin-modal--video-filters\s*\{[^}]*border:\s*0;/s);
+  assert.match(
+    adminCss,
+    /\.admin-modal--video-filters \.admin-modal__header,\s*\.admin-modal--video-filters \.admin-modal__footer\s*\{[^}]*background:\s*var\(--bg-surface\);/s
+  );
+  assert.match(adminCss, /\.admin-video-advanced-filters\s*\{/);
+  assert.match(adminCss, /\.admin-video-source-picker__trigger\s*\{/);
+  assert.match(adminCss, /\.admin-video-source-picker__menu\s*\{/);
+  assert.match(desktopRange, /grid-column\s*:\s*1\s*\/\s*-1/);
+  assert.match(desktopRangeInputs, /grid-template-columns\s*:\s*minmax\(0,\s*1fr\) auto minmax\(0,\s*1fr\)/);
+  assert.match(desktopRangeInputs, /justify-content\s*:\s*stretch/);
+  assert.match(desktopRangeInputs, /width\s*:\s*100%/);
+  assert.match(desktopRangeControls, /width\s*:\s*100%/);
+  assert.doesNotMatch(ruleBody(adminCss, ".admin-video-source-picker__search"), /border-bottom/);
+  assert.doesNotMatch(ruleBody(adminCss, ".admin-video-source-picker__option.is-selected"), /border/);
+  assert.doesNotMatch(
+    ruleBody(adminCss, ".admin-video-source-picker__group + .admin-video-source-picker__group"),
+    /border-top/
+  );
   assert.doesNotMatch(adminCss, /admin-video-tab__count/);
 });
 
@@ -667,7 +709,18 @@ test("admin video management controls wrap instead of covering text on mobile", 
   const paginationInfo = allRuleBodies(css, ".admin-table-pagination__info");
   const currentFilter = ruleBody(css, ".admin-videos-filter--current");
   const currentFilterField = ruleBodyByContains(css, ".admin-videos-filter--current .admin-videos-filter__search");
-  const currentFilterBatch = ruleBodyByContains(css, ".admin-videos-filter--current .admin-videos-filter__batch");
+  const currentFilterActions = ruleBodyByContains(
+    css,
+    ".admin-videos-filter--current .admin-videos-filter__current-actions"
+  );
+  const currentFilterActionButton = ruleBodyByContains(
+    css,
+    ".admin-videos-filter--current .admin-videos-filter__current-actions .admin-btn"
+  );
+  const currentFilterActionDivider = ruleBodyByContains(
+    css,
+    ".admin-videos-filter__current-actions"
+  );
   const blacklistFilter = allRuleBodies(css, ".admin-videos-filter--blacklist");
   const blacklistFilterField = ruleBodyByContains(css, ".admin-videos-filter--blacklist .admin-videos-filter__search");
   const blacklistFilterActions = ruleBodyByContains(css, ".admin-videos-filter--blacklist .admin-videos-filter__actions");
@@ -708,14 +761,22 @@ test("admin video management controls wrap instead of covering text on mobile", 
   assert.match(currentFilter, /display\s*:\s*grid/);
   assert.match(currentFilter, /grid-template-columns\s*:\s*minmax\(0,\s*1fr\)/);
   assert.match(currentFilterField, /min-width\s*:\s*0/);
-  assert.match(currentFilterBatch, /position\s*:\s*fixed/);
-  assert.match(currentFilterBatch, /right\s*:\s*var\(--space-3\)/);
-  assert.match(currentFilterBatch, /bottom\s*:\s*calc\(var\(--space-3\)\s*\+\s*env\(safe-area-inset-bottom\)\)/);
-  assert.match(currentFilterBatch, /width\s*:\s*max-content/);
-  assert.match(currentFilterBatch, /min-width\s*:\s*76px/);
-  assert.match(currentFilterBatch, /border\s*:\s*1px solid var\(--border-subtle\)/);
-  assert.match(currentFilterBatch, /background\s*:\s*var\(--bg-surface\)/);
-  assert.match(currentFilterBatch, /white-space\s*:\s*nowrap/);
+  assert.match(currentFilterActions, /position\s*:\s*fixed/);
+  assert.match(currentFilterActions, /right\s*:\s*var\(--space-3\)/);
+  assert.match(currentFilterActions, /bottom\s*:\s*calc\(var\(--space-3\)\s*\+\s*env\(safe-area-inset-bottom\)\)/);
+  assert.match(currentFilterActions, /width\s*:\s*max-content/);
+  assert.match(currentFilterActions, /border\s*:\s*1px solid var\(--border-subtle\)/);
+  assert.match(currentFilterActions, /background\s*:\s*var\(--bg-surface\)/);
+  assert.match(currentFilterActions, /overflow\s*:\s*hidden/);
+  assert.match(currentFilterActionButton, /position\s*:\s*relative/);
+  assert.match(currentFilterActionButton, /min-height\s*:\s*44px/);
+  assert.match(currentFilterActionButton, /min-width\s*:\s*76px/);
+  assert.match(currentFilterActionButton, /border\s*:\s*0/);
+  assert.match(currentFilterActionButton, /border-radius\s*:\s*0/);
+  assert.match(currentFilterActionButton, /background\s*:\s*transparent/);
+  assert.match(currentFilterActionButton, /box-shadow\s*:\s*none/);
+  assert.match(currentFilterActionDivider, /content\s*:\s*""/);
+  assert.match(currentFilterActionDivider, /height\s*:\s*18px/);
   assert.match(blacklistFilter, /display\s*:\s*grid/);
   assert.match(blacklistFilter, /grid-template-columns\s*:\s*minmax\(0,\s*1fr\)/);
   assert.match(blacklistFilterField, /min-width\s*:\s*0/);
@@ -735,7 +796,7 @@ test("admin video management controls wrap instead of covering text on mobile", 
   assert.match(blacklistFilterBatch, /background\s*:\s*transparent/);
   assert.match(blacklistFilterBatch, /box-shadow\s*:\s*none/);
   assert.match(blacklistFilterBatch, /white-space\s*:\s*nowrap/);
-  assert.match(css, /\.admin-videos-current\.has-bulk-actions \.admin-videos-filter__batch-select,[\s\S]*?\.admin-videos-blacklist\.has-bulk-actions \.admin-videos-filter__actions\s*\{[^}]*display\s*:\s*none/s);
+  assert.match(css, /\.admin-videos-current\.has-bulk-actions \.admin-videos-filter__current-actions,[\s\S]*?\.admin-videos-blacklist\.has-bulk-actions \.admin-videos-filter__actions\s*\{[^}]*display\s*:\s*none/s);
   assert.match(bulkToolbar, /position\s*:\s*fixed/);
   assert.match(bulkToolbar, /bottom\s*:\s*calc\(var\(--space-3\)\s*\+\s*env\(safe-area-inset-bottom\)\)/);
   assert.match(bulkToolbar, /margin\s*:\s*0/);
@@ -870,14 +931,22 @@ test("video edit modal stays focused on common metadata", () => {
     videosPageSource.indexOf("function tagAssignmentSourceLabel")
   );
   const editModal = ruleBody(adminCss, ".admin-modal--video-edit");
-  const editModalChrome = ruleBodyByContains(adminCss, ".admin-modal--video-edit .admin-modal__header");
+  const editModalHeader = ruleBody(adminCss, ".admin-modal--video-edit .admin-modal__header");
+  const editModalFooter = allRuleBodies(adminCss, ".admin-modal--video-edit .admin-modal__footer");
   const editTagPicker = ruleBody(adminCss, ".admin-modal--video-edit .admin-video-tag-picker");
-  const previewActions = ruleBody(adminCss, ".admin-video-preview-actions");
+  const selectedTagOption = ruleBody(adminCss, ".admin-modal--video-edit .admin-video-tag-option:has(input:checked)");
+  const editBasics = ruleBody(adminCss, ".admin-video-edit-basics");
+  const editMeta = ruleBody(adminCss, ".admin-video-edit-meta");
+  const footerActions = ruleBody(adminCss, ".admin-video-edit-footer-actions");
+  const previewActions = allRuleBodies(adminCss, ".admin-video-preview-actions");
   const previewButton = ruleBody(adminCss, ".admin-video-preview-button");
+  const viewVideoLink = ruleBody(adminCss, ".admin-video-edit-view-link");
   const previewStatusDot = ruleBody(adminCss, ".admin-modal--video-edit .admin-video-preview-actions .admin-status::before");
 
   assert.match(videosPageSource, /ariaLabel="编辑视频"/);
+  assert.match(editModalSource, /title="编辑视频"/);
   assert.match(editModalSource, /className="admin-modal--video-edit"/);
+  assert.match(editModalSource, /className="admin-btn admin-video-edit-view-link"[\s\S]*?to=\{`\/video\/\$\{encodeURIComponent\(video\.id\)\}`\}[\s\S]*?target="_blank"[\s\S]*?rel="noreferrer"[\s\S]*?>\s*查看视频播放页\s*<\/Link>/);
   assert.doesNotMatch(videosPageSource, /title=\{`编辑视频 ·/);
   assert.doesNotMatch(videosPageSource, /const \[badges, setBadges\]/);
   assert.doesNotMatch(videosPageSource, /const \[thumbnail, setThumbnail\]/);
@@ -894,14 +963,23 @@ test("video edit modal stays focused on common metadata", () => {
   assert.doesNotMatch(editModalSource, /video-description|video-duration|技术信息（排查用）|内部视频 ID|网盘文件 ID/);
   assert.doesNotMatch(editModalSource, /const \[description, setDescription\]|const \[durationSec, setDurationSec\]/);
   assert.doesNotMatch(editModalSource, /description,|durationSeconds:/);
-  assert.match(editModal, /border\s*:\s*0/);
-  assert.match(editModal, /box-shadow\s*:\s*none/);
-  assert.match(editModalChrome, /border\s*:\s*0/);
-  assert.match(editModalChrome, /background\s*:\s*var\(--bg-surface\)/);
+  assert.match(editModal, /width\s*:\s*min\(680px,\s*100%\)/);
+  assert.match(editModal, /border\s*:\s*1px solid var\(--border-subtle\)/);
+  assert.match(editModal, /box-shadow\s*:\s*var\(--shadow-xl\)/);
+  assert.match(editModalHeader, /border-bottom\s*:\s*1px solid var\(--border-subtle\)/);
+  assert.match(editModalFooter, /border-top\s*:\s*1px solid var\(--border-subtle\)/);
   assert.match(editTagPicker, /border\s*:\s*0/);
   assert.match(editTagPicker, /background\s*:\s*transparent/);
+  assert.match(editModalSource, /<section className="admin-video-edit-section">\s*<h3>基本信息<\/h3>[\s\S]*?<h3>标签<\/h3>[\s\S]*?<h3>视频信息<\/h3>/);
+  assert.match(editBasics, /grid-template-columns\s*:\s*minmax\(0,\s*2fr\) minmax\(160px,\s*1fr\)/);
+  assert.match(selectedTagOption, /background\s*:\s*var\(--accent-soft\)/);
+  assert.match(editMeta, /grid-template-columns\s*:\s*repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(editMeta, /background\s*:\s*color-mix/);
+  assert.match(footerActions, /display\s*:\s*flex/);
   assert.doesNotMatch(editModalSource, /admin-video-tag-option__count|\{tag\.count\}/);
   assert.doesNotMatch(adminCss, /admin-video-tag-option__count/);
+  assert.doesNotMatch(editModalSource, /admin-video-tag-option__source|video\.tagSources\?\.\[tag\.label\]/);
+  assert.doesNotMatch(adminCss, /admin-video-tag-option__source/);
   assert.match(previewActions, /display\s*:\s*flex/);
   assert.match(previewActions, /align-items\s*:\s*center/);
   assert.match(previewActions, /gap\s*:\s*var\(--space-5\)/);
@@ -909,6 +987,8 @@ test("video edit modal stays focused on common metadata", () => {
   assert.match(previewButton, /font-size\s*:\s*var\(--font-xs\)/);
   assert.match(previewStatusDot, /content\s*:\s*none/);
   assert.match(previewStatusDot, /display\s*:\s*none/);
+  assert.match(viewVideoLink, /margin-right\s*:\s*auto/);
+  assert.match(viewVideoLink, /white-space\s*:\s*nowrap/);
   assert.match(editModalSource, /<dt>预览视频<\/dt>\s*<dd className="admin-video-preview-actions">\s*<PreviewStatus[\s\S]*?className="admin-btn admin-video-preview-button"[\s\S]*?<\/button>/);
   assert.doesNotMatch(editModalSource, /<RefreshCw size=\{13\} className=\{previewBusy/);
 });

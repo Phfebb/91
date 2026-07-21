@@ -613,11 +613,28 @@ export type AdminVideoList = {
   size: number;
 };
 
+export type AdminVideoListParams = {
+  driveId?: string;
+  crawlerId?: string;
+  createdFrom?: string;
+  createdTo?: string;
+  durationMinMinutes?: string;
+  durationMaxMinutes?: string;
+  page?: number;
+  size?: number;
+  keyword?: string;
+};
+
 export function listVideos(
-  params: { driveId?: string; page?: number; size?: number; keyword?: string } = {}
+  params: AdminVideoListParams = {}
 ) {
   const qs = new URLSearchParams();
   if (params.driveId) qs.set("driveId", params.driveId);
+  if (params.crawlerId) qs.set("crawlerId", params.crawlerId);
+  if (params.createdFrom) qs.set("createdFrom", params.createdFrom);
+  if (params.createdTo) qs.set("createdTo", params.createdTo);
+  if (params.durationMinMinutes) qs.set("durationMinMinutes", params.durationMinMinutes);
+  if (params.durationMaxMinutes) qs.set("durationMaxMinutes", params.durationMaxMinutes);
   if (params.page) qs.set("page", String(params.page));
   if (params.size) qs.set("size", String(params.size));
   if (params.keyword) qs.set("keyword", params.keyword);

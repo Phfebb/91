@@ -604,6 +604,8 @@ func (c *Catalog) ensureBaseVideoIndexes(ctx context.Context) error {
 	for _, stmt := range []string{
 		`CREATE INDEX IF NOT EXISTS idx_videos_drive ON videos(drive_id, file_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_videos_pub ON videos(published_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_videos_created ON videos(created_at DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_videos_duration ON videos(duration_seconds)`,
 		`CREATE INDEX IF NOT EXISTS idx_videos_views ON videos(views DESC)`,
 	} {
 		if _, err := c.db.ExecContext(ctx, stmt); err != nil {

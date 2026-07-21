@@ -305,5 +305,5 @@ test("admin videos render tag assignment source and evidence", () => {
   assert.match(videosPageSource, /data-source=\{v\.tagSources\?\.\[t\]/);
   assert.match(videosPageSource, /tagAssignmentSourceLabel/);
   assert.match(videosPageSource, /tagAssignmentTitle/);
-  assert.match(videosPageSource, /video\.tagEvidence\?\.\[tag\.label\]/);
+  assert.match(videosPageSource, /video\.tagEvidence\?\.\[label\]/);
 });

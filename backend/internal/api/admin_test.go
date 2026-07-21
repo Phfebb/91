@@ -3192,6 +3192,114 @@ func TestHandleAdminListVideosFiltersByDriveID(t *testing.T) {
 	}
 }
 
+func TestHandleAdminListVideosAppliesAdvancedFilters(t *testing.T) {
+	ctx := context.Background()
+	cat, err := catalog.Open(t.TempDir() + "/catalog.db")
+	if err != nil {
+		t.Fatalf("open catalog: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := cat.Close(); err != nil {
+			t.Fatalf("close catalog: %v", err)
+		}
+	})
+
+	seed := func(id, driveID string, createdAt, publishedAt time.Time, durationSeconds int) {
+		t.Helper()
+		if err := cat.UpsertVideo(ctx, &catalog.Video{
+			ID:              id,
+			DriveID:         driveID,
+			FileID:          "file-" + id,
+			Title:           id,
+			DurationSeconds: durationSeconds,
+			PublishedAt:     publishedAt,
+			CreatedAt:       createdAt,
+			UpdatedAt:       createdAt,
+		}); err != nil {
+			t.Fatalf("seed %s: %v", id, err)
+		}
+	}
+	seed(
+		"scriptcrawler-crawler-a-source-1",
+		"cloud-a",
+		time.Date(2026, time.July, 10, 23, 30, 0, 0, time.Local),
+		time.Date(2026, time.June, 1, 23, 30, 0, 0, time.Local),
+		5*60,
+	)
+	seed(
+		"scriptcrawler-crawler-a-source-2",
+		"cloud-a",
+		time.Date(2026, time.July, 11, 0, 30, 0, 0, time.Local),
+		time.Date(2026, time.June, 2, 0, 30, 0, 0, time.Local),
+		15*60,
+	)
+	seed(
+		"scriptcrawler-crawler-b-source-3",
+		"cloud-b",
+		time.Date(2026, time.July, 10, 12, 0, 0, 0, time.Local),
+		time.Date(2026, time.June, 1, 12, 0, 0, 0, time.Local),
+		5*60,
+	)
+	for _, source := range []struct {
+		crawlerID string
+		sourceID  string
+		videoID   string
+	}{
+		{"crawler-a", "source-1", "scriptcrawler-crawler-a-source-1"},
+		{"crawler-a", "source-2", "scriptcrawler-crawler-a-source-2"},
+		{"crawler-b", "source-3", "scriptcrawler-crawler-b-source-3"},
+	} {
+		if err := cat.MarkCrawlerSourceSeen(ctx, "scriptcrawler", source.crawlerID, source.sourceID, "imported", source.videoID, "", 0); err != nil {
+			t.Fatalf("mark crawler source %s: %v", source.sourceID, err)
+		}
+	}
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/admin/api/videos?driveId=cloud-a&crawlerId=crawler-a&createdFrom=2026-07-10&createdTo=2026-07-10&durationMinMinutes=4&durationMaxMinutes=6",
+		nil,
+	)
+	rr := httptest.NewRecorder()
+	(&AdminServer{Catalog: cat}).handleAdminListVideos(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+	var got struct {
+		Items []catalog.Video `json:"items"`
+		Total int             `json:"total"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Total != 1 || len(got.Items) != 1 || got.Items[0].ID != "scriptcrawler-crawler-a-source-1" {
+		t.Fatalf("filtered response = total %d items %#v, want source-1", got.Total, got.Items)
+	}
+}
+
+func TestHandleAdminListVideosRejectsInvalidAdvancedRanges(t *testing.T) {
+	cat, err := catalog.Open(t.TempDir() + "/catalog.db")
+	if err != nil {
+		t.Fatalf("open catalog: %v", err)
+	}
+	t.Cleanup(func() { _ = cat.Close() })
+
+	tomorrow := time.Now().In(time.Local).AddDate(0, 0, 1).Format(adminVideoDateLayout)
+	for _, target := range []string{
+		"/admin/api/videos?createdFrom=2026/07/10",
+		"/admin/api/videos?createdFrom=" + tomorrow,
+		"/admin/api/videos?createdTo=" + tomorrow,
+		"/admin/api/videos?durationMinMinutes=10&durationMaxMinutes=5",
+		"/admin/api/videos?durationMinMinutes=1.5",
+	} {
+		req := httptest.NewRequest(http.MethodGet, target, nil)
+		rr := httptest.NewRecorder()
+		(&AdminServer{Catalog: cat}).handleAdminListVideos(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Fatalf("%s: status = %d, body = %s", target, rr.Code, rr.Body.String())
+		}
+	}
+}
+
 func TestHandleAdminListVideosDoesNotExposeCategory(t *testing.T) {
 	ctx := context.Background()
 	cat, err := catalog.Open(t.TempDir() + "/catalog.db")

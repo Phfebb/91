@@ -1804,12 +1804,17 @@ func (c *Catalog) UpdateVideoFingerprint(ctx context.Context, id, sampledSHA256,
 type ListParams struct {
 	Keyword               string
 	DriveID               string
+	CrawlerID             string
 	Tag                   string
 	Sort                  string // latest | hot | recent
 	ThumbnailReadyOnly    bool
 	PreferReadyThumbnails bool
 	SkipTotal             bool
 	IncludeSourceDeleted  bool
+	CreatedAtFrom         int64 // inclusive unix milliseconds
+	CreatedAtBefore       int64 // exclusive unix milliseconds
+	DurationSecondsMin    int   // inclusive; zero disables the lower bound
+	DurationSecondsMax    int   // inclusive; zero disables the upper bound
 	Page                  int
 	PageSize              int
 }
@@ -1832,6 +1837,36 @@ func (c *Catalog) ListVideos(ctx context.Context, p ListParams) ([]*Video, int, 
 	if p.DriveID != "" {
 		where = append(where, "drive_id = ?")
 		args = append(args, p.DriveID)
+	}
+	if crawlerID := strings.TrimSpace(p.CrawlerID); crawlerID != "" {
+		where = append(where, `EXISTS (
+			SELECT 1
+			  FROM crawler_seen_sources AS crawler_source
+			 WHERE crawler_source.kind = 'scriptcrawler'
+			   AND crawler_source.drive_id = ?
+			   AND crawler_source.status = 'imported'
+			   AND crawler_source.canonical_video_id = videos.id
+		)`)
+		args = append(args, crawlerID)
+	}
+	if p.CreatedAtFrom > 0 {
+		where = append(where, "videos.created_at >= ?")
+		args = append(args, p.CreatedAtFrom)
+	}
+	if p.CreatedAtBefore > 0 {
+		where = append(where, "videos.created_at < ?")
+		args = append(args, p.CreatedAtBefore)
+	}
+	if p.DurationSecondsMin > 0 || p.DurationSecondsMax > 0 {
+		where = append(where, "COALESCE(videos.duration_seconds, 0) > 0")
+		if p.DurationSecondsMin > 0 {
+			where = append(where, "videos.duration_seconds >= ?")
+			args = append(args, p.DurationSecondsMin)
+		}
+		if p.DurationSecondsMax > 0 {
+			where = append(where, "videos.duration_seconds <= ?")
+			args = append(args, p.DurationSecondsMax)
+		}
 	}
 	if p.Tag != "" {
 		where = append(where, videoMatchesTagLabelSQL("videos"))

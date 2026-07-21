@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS videos (
 
 CREATE INDEX IF NOT EXISTS idx_videos_drive ON videos(drive_id, file_id);
 CREATE INDEX IF NOT EXISTS idx_videos_pub   ON videos(published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_videos_created ON videos(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_videos_duration ON videos(duration_seconds);
 CREATE INDEX IF NOT EXISTS idx_videos_views ON videos(views DESC);
 
 -- 统一标签池
@@ -117,6 +119,8 @@ CREATE TABLE IF NOT EXISTS crawler_seen_sources (
 
 CREATE INDEX IF NOT EXISTS idx_crawler_seen_sources_drive
     ON crawler_seen_sources(kind, drive_id, status);
+CREATE INDEX IF NOT EXISTS idx_crawler_seen_sources_video
+    ON crawler_seen_sources(kind, drive_id, status, canonical_video_id);
 
 -- 网盘账户
 CREATE TABLE IF NOT EXISTS drives (

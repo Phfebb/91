@@ -1,6 +1,8 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
+  Check,
+  ChevronDown,
   Edit,
   RefreshCw,
   Search,
@@ -13,6 +15,7 @@ import { Modal } from "./Modal";
 import { ConfirmModal } from "./ConfirmModal";
 import { formatBytes } from "./storageFormat";
 import { AdminEmptyVisual } from "./AdminEmptyVisual";
+import { driveKindAbbr, driveKindIconPath, kindLabel } from "./drive/constants";
 
 const DESKTOP_VIDEOS_PAGE_SIZE = 50;
 const MOBILE_VIDEOS_PAGE_SIZE = 20;
@@ -28,6 +31,24 @@ type TabKey = "current" | "blacklist";
 type RegenPreviewState = {
   expiresAt: number;
   originalUpdatedAt: number;
+};
+
+type VideoAdvancedFilterValues = {
+  driveId: string;
+  crawlerId: string;
+  createdFrom: string;
+  createdTo: string;
+  durationMinMinutes: string;
+  durationMaxMinutes: string;
+};
+
+const EMPTY_VIDEO_FILTERS: VideoAdvancedFilterValues = {
+  driveId: "",
+  crawlerId: "",
+  createdFrom: "",
+  createdTo: "",
+  durationMinMinutes: "",
+  durationMaxMinutes: "",
 };
 
 const TABS: { key: TabKey; label: string }[] = [
@@ -105,10 +126,14 @@ function CurrentVideosTab({
 }) {
   const [list, setList] = useState<api.AdminVideo[]>([]);
   const [drives, setDrives] = useState<api.AdminDrive[]>([]);
+  const [crawlers, setCrawlers] = useState<api.AdminCrawler[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [keyword, setKeyword] = useState("");
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
+  const [draftFilters, setDraftFilters] = useState<VideoAdvancedFilterValues>(() => ({ ...EMPTY_VIDEO_FILTERS }));
+  const [appliedFilters, setAppliedFilters] = useState<VideoAdvancedFilterValues>(() => ({ ...EMPTY_VIDEO_FILTERS }));
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [editing, setEditing] = useState<api.AdminVideo | null>(null);
@@ -122,34 +147,50 @@ function CurrentVideosTab({
   const [deleting, setDeleting] = useState(false);
   const [deleteSource, setDeleteSource] = useState(false);
   const [regenPreviewById, setRegenPreviewById] = useState<Record<string, RegenPreviewState>>({});
+  const listRequestIdRef = useRef(0);
   const pageSize = NORMAL_VIDEOS_PAGE_SIZE;
   const { show } = useToast();
+  const activeListQueryKey = JSON.stringify([page, searchKeyword, appliedFilters]);
+  const activeListQueryKeyRef = useRef(activeListQueryKey);
+  activeListQueryKeyRef.current = activeListQueryKey;
 
   async function refresh() {
+    const requestId = ++listRequestIdRef.current;
+    const queryKey = activeListQueryKey;
     setLoading(true);
     setLoadError("");
     try {
-      const [r, tagList, driveList] = await Promise.all([
-        api.listVideos({ page, size: pageSize, keyword: searchKeyword }),
-        api.listTags(),
-        api.listDrives(),
-      ]);
+      const r = await api.listVideos({
+        page,
+        size: pageSize,
+        keyword: searchKeyword,
+        ...appliedFilters,
+      });
+      if (requestId !== listRequestIdRef.current || queryKey !== activeListQueryKeyRef.current) return;
       setList(r.items ?? []);
       setTotal(r.total ?? 0);
-      setAvailableTags(tagList);
-      setDrives(driveList ?? []);
     } catch (e) {
+      if (requestId !== listRequestIdRef.current || queryKey !== activeListQueryKeyRef.current) return;
       const message = e instanceof Error ? e.message : "加载失败";
       setLoadError(message);
       show(message, "error");
     } finally {
-      setLoading(false);
+      if (requestId === listRequestIdRef.current && queryKey === activeListQueryKeyRef.current) {
+        setLoading(false);
+      }
     }
   }
 
   async function refreshListOnly() {
+    const queryKey = activeListQueryKey;
     try {
-      const r = await api.listVideos({ page, size: pageSize, keyword: searchKeyword });
+      const r = await api.listVideos({
+        page,
+        size: pageSize,
+        keyword: searchKeyword,
+        ...appliedFilters,
+      });
+      if (queryKey !== activeListQueryKeyRef.current) return;
       setList(r.items ?? []);
       setTotal(r.total ?? 0);
     } catch {
@@ -162,7 +203,24 @@ function CurrentVideosTab({
 
   useEffect(() => {
     refresh();
-  }, [page, searchKeyword, pageSize]);
+  }, [page, searchKeyword, pageSize, appliedFilters]);
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([api.listTags(), api.listDrives(), api.listCrawlers()])
+      .then(([tagList, driveList, crawlerList]) => {
+        if (!active) return;
+        setAvailableTags(tagList ?? []);
+        setDrives(driveList ?? []);
+        setCrawlers(crawlerList ?? []);
+      })
+      .catch((e) => {
+        if (active) show(e instanceof Error ? e.message : "筛选选项加载失败", "error");
+      });
+    return () => {
+      active = false;
+    };
+  }, [show]);
 
   useEffect(() => {
     setPage(1);
@@ -170,7 +228,7 @@ function CurrentVideosTab({
 
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [searchKeyword]);
+  }, [searchKeyword, appliedFilters]);
 
   useEffect(() => {
     if (keyword === searchKeyword) return;
@@ -187,7 +245,7 @@ function CurrentVideosTab({
       refreshListOnly();
     }, REGEN_PREVIEW_POLL_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [trackedRegenCount, hasGeneratingPreview, page, pageSize, searchKeyword]);
+  }, [trackedRegenCount, hasGeneratingPreview, page, pageSize, searchKeyword, appliedFilters]);
 
   useEffect(() => {
     if (trackedRegenCount === 0) return;
@@ -215,7 +273,8 @@ function CurrentVideosTab({
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const showPagination = totalPages > 1;
   const placeholderRows = showPagination ? Math.max(0, pageSize - listItems.length) : 0;
-  const hasActiveSearch = searchKeyword.trim().length > 0;
+  const activeAdvancedFilterCount = countVideoAdvancedFilters(appliedFilters);
+  const hasActiveSearch = searchKeyword.trim().length > 0 || activeAdvancedFilterCount > 0;
   const hasVideoActions = listItems.length > 0;
   const allPageSelected =
     listItems.length > 0 && listItems.every((video) => selectedIds.has(video.id));
@@ -353,22 +412,98 @@ function CurrentVideosTab({
     setPage(1);
   }
 
+  function openAdvancedFilters() {
+    setDraftFilters({ ...appliedFilters });
+    setAdvancedFiltersOpen(true);
+  }
+
+  function applyAdvancedFilters(e: React.FormEvent) {
+    e.preventDefault();
+    const today = localDateInputValue(new Date());
+    if (
+      dateIsAfter(draftFilters.createdFrom, today) ||
+      dateIsAfter(draftFilters.createdTo, today)
+    ) {
+      show("入库时间不能超过当天", "error");
+      return;
+    }
+    if (dateRangeIsReversed(draftFilters.createdFrom, draftFilters.createdTo)) {
+      show("入库时间开始日期不能晚于结束日期", "error");
+      return;
+    }
+    if (numberRangeIsReversed(draftFilters.durationMinMinutes, draftFilters.durationMaxMinutes)) {
+      show("视频时长最短值不能大于最长值", "error");
+      return;
+    }
+    setAppliedFilters({ ...draftFilters });
+    setPage(1);
+    setAdvancedFiltersOpen(false);
+  }
+
+  function clearAdvancedFilters() {
+    setDraftFilters({ ...EMPTY_VIDEO_FILTERS });
+  }
+
   return (
     <div className={`admin-videos-current${selectMode ? " has-bulk-actions" : ""}`}>
       <div className="admin-page__actions admin-videos-filter admin-videos-filter--current">
         <SearchBox keyword={keyword} onChange={setKeyword} onSubmit={handleSearchSubmit} />
-        {hasVideoActions && (
+        <div className="admin-videos-filter__current-actions">
           <button
             type="button"
-            className={`admin-btn admin-videos-filter__batch admin-videos-filter__batch-select${selectMode ? " is-primary" : ""}`}
-            onClick={toggleSelectMode}
-            aria-pressed={selectMode}
+            className="admin-btn admin-video-advanced-toggle"
+            onClick={openAdvancedFilters}
+            aria-haspopup="dialog"
           >
-            <span>{selectMode ? "退出选择" : "批量选择"}</span>
+            <span>高级筛选</span>
+            {activeAdvancedFilterCount > 0 && (
+              <span className="admin-video-advanced-toggle__count" aria-label={`已启用 ${activeAdvancedFilterCount} 项筛选`}>
+                {activeAdvancedFilterCount}
+              </span>
+            )}
           </button>
-        )}
+          {hasVideoActions && (
+            <button
+              type="button"
+              className={`admin-btn admin-videos-filter__batch admin-videos-filter__batch-select${selectMode ? " is-primary" : ""}`}
+              onClick={toggleSelectMode}
+              aria-pressed={selectMode}
+            >
+              <span>{selectMode ? "退出选择" : "批量选择"}</span>
+            </button>
+          )}
+        </div>
       </div>
       {tabSelector}
+      <Modal
+        open={advancedFiltersOpen}
+        title="高级筛选"
+        onClose={() => setAdvancedFiltersOpen(false)}
+        className="admin-modal--video-filters"
+        footer={
+          <>
+            <button type="button" className="admin-btn admin-video-advanced-clear" onClick={clearAdvancedFilters}>
+              清空筛选
+            </button>
+            <div className="admin-video-advanced-modal-actions">
+              <button type="button" className="admin-btn" onClick={() => setAdvancedFiltersOpen(false)}>
+                取消
+              </button>
+              <button type="submit" form="admin-video-advanced-filters" className="admin-btn is-primary">
+                应用
+              </button>
+            </div>
+          </>
+        }
+      >
+        <AdvancedVideoFilters
+          value={draftFilters}
+          drives={drives}
+          crawlers={crawlers}
+          onChange={setDraftFilters}
+          onSubmit={applyAdvancedFilters}
+        />
+      </Modal>
 
       {!loading && selectMode && (
         <div className="admin-videos-list-toolbar">
@@ -1033,6 +1168,518 @@ function BlacklistTab({
 
 // ---------- 共享小组件 ----------
 
+type VideoSourcePickerKind = "drive" | "crawler" | null;
+
+type VideoSourceMenuPosition = {
+  placement: "top" | "bottom";
+  left: number;
+  top?: number;
+  bottom?: number;
+  width: number;
+  maxHeight: number;
+};
+
+function VideoSourcePicker({
+  driveId,
+  crawlerId,
+  drives,
+  crawlers,
+  onChange,
+}: {
+  driveId: string;
+  crawlerId: string;
+  drives: api.AdminDrive[];
+  crawlers: api.AdminCrawler[];
+  onChange: (kind: VideoSourcePickerKind, id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [menuPosition, setMenuPosition] = useState<VideoSourceMenuPosition | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const listboxId = useId();
+
+  const selectedDrive = drives.find((drive) => drive.id === driveId);
+  const selectedCrawler = crawlers.find((crawler) => crawler.id === crawlerId);
+  const selectedKind: VideoSourcePickerKind = crawlerId ? "crawler" : driveId ? "drive" : null;
+  const selectedName = selectedCrawler?.name || selectedDrive?.name || crawlerId || driveId || "全部来源";
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const filteredDrives = drives.filter((drive) =>
+    [drive.name, drive.id, kindLabel[drive.kind]].some((text) =>
+      (text || "").toLocaleLowerCase().includes(normalizedQuery)
+    )
+  );
+  const filteredCrawlers = crawlers.filter((crawler) =>
+    [crawler.name, crawler.id, "脚本爬虫"].some((text) =>
+      text.toLocaleLowerCase().includes(normalizedQuery)
+    )
+  );
+  const hasMatches = filteredDrives.length > 0 || filteredCrawlers.length > 0;
+
+  useEffect(() => {
+    if (!open) return;
+    function closeOnOutsidePointer(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && !rootRef.current?.contains(target)) {
+        setOpen(false);
+        setMenuPosition(null);
+      }
+    }
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+
+    const updateMenuPosition = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+
+      const rect = trigger.getBoundingClientRect();
+      const viewportPadding = 12;
+      const menuGap = 8;
+      const preferredHeight = 356;
+      const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - menuGap - viewportPadding);
+      const spaceAbove = Math.max(0, rect.top - menuGap - viewportPadding);
+      const placement = spaceBelow < 240 && spaceAbove > spaceBelow ? "top" : "bottom";
+      const availableHeight = placement === "top" ? spaceAbove : spaceBelow;
+      const width = Math.min(rect.width, window.innerWidth - viewportPadding * 2);
+      const left = Math.min(
+        Math.max(viewportPadding, rect.left),
+        Math.max(viewportPadding, window.innerWidth - viewportPadding - width)
+      );
+
+      setMenuPosition({
+        placement,
+        left: Math.round(left),
+        top: placement === "bottom" ? Math.round(rect.bottom + menuGap) : undefined,
+        bottom: placement === "top" ? Math.round(window.innerHeight - rect.top + menuGap) : undefined,
+        width: Math.round(width),
+        maxHeight: Math.max(96, Math.min(preferredHeight, Math.floor(availableHeight))),
+      });
+    };
+
+    updateMenuPosition();
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    window.visualViewport?.addEventListener("resize", updateMenuPosition);
+    window.visualViewport?.addEventListener("scroll", updateMenuPosition);
+    const resizeObserver =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(updateMenuPosition);
+    if (triggerRef.current) resizeObserver?.observe(triggerRef.current);
+
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+      window.visualViewport?.removeEventListener("resize", updateMenuPosition);
+      window.visualViewport?.removeEventListener("scroll", updateMenuPosition);
+      resizeObserver?.disconnect();
+    };
+  }, [open]);
+
+  function optionElements(): HTMLButtonElement[] {
+    return Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []);
+  }
+
+  function openPicker(focusTarget?: "first" | "last") {
+    setQuery("");
+    setMenuPosition(null);
+    setOpen(true);
+    window.requestAnimationFrame(() => {
+      const options = optionElements();
+      listRef.current
+        ?.querySelector<HTMLElement>('[role="option"][aria-selected="true"]')
+        ?.scrollIntoView({ block: "nearest" });
+      if (!focusTarget) return;
+      (focusTarget === "first" ? options[0] : options[options.length - 1])?.focus();
+    });
+  }
+
+  function closePicker(restoreFocus = false) {
+    setOpen(false);
+    setMenuPosition(null);
+    if (restoreFocus) {
+      window.requestAnimationFrame(() => triggerRef.current?.focus());
+    }
+  }
+
+  function selectSource(kind: VideoSourcePickerKind, id: string) {
+    onChange(kind, id);
+    closePicker(true);
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape" && open) {
+      event.preventDefault();
+      event.stopPropagation();
+      closePicker(true);
+      return;
+    }
+
+    if (!open) {
+      if (event.target === triggerRef.current && event.key === "ArrowDown") {
+        event.preventDefault();
+        openPicker("first");
+      } else if (event.target === triggerRef.current && event.key === "ArrowUp") {
+        event.preventDefault();
+        openPicker("last");
+      }
+      return;
+    }
+
+    if (event.key === "Tab") {
+      const pickerRoot = event.currentTarget;
+      window.requestAnimationFrame(() => {
+        const activeElement = document.activeElement;
+        if (!(activeElement instanceof Node) || !pickerRoot.contains(activeElement)) {
+          setOpen(false);
+          setMenuPosition(null);
+        }
+      });
+      return;
+    }
+
+    const options = optionElements();
+    if (
+      event.key === "Enter" &&
+      event.target === searchRef.current &&
+      normalizedQuery &&
+      options.length > 0
+    ) {
+      event.preventDefault();
+      options[0].click();
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key) || options.length === 0) {
+      return;
+    }
+
+    event.preventDefault();
+    const currentIndex = options.indexOf(document.activeElement as HTMLButtonElement);
+    let nextIndex = currentIndex;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = options.length - 1;
+    if (event.key === "ArrowDown") nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % options.length;
+    if (event.key === "ArrowUp") nextIndex = currentIndex <= 0 ? options.length - 1 : currentIndex - 1;
+    options[nextIndex]?.focus();
+  }
+
+  return (
+    <div
+      ref={rootRef}
+      className={`admin-video-source-picker${open ? " is-open" : ""}`}
+      onKeyDown={handleKeyDown}
+    >
+      <button
+        ref={triggerRef}
+        type="button"
+        role="combobox"
+        className="admin-video-source-picker__trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listboxId : undefined}
+        aria-label={`来源，当前为${selectedName}`}
+        onClick={() => (open ? closePicker() : openPicker())}
+      >
+        <VideoSourcePickerIcon drive={selectedDrive} crawler={selectedCrawler} />
+        <span className="admin-video-source-picker__selection">
+          <strong>{selectedName}</strong>
+        </span>
+        <ChevronDown
+          size={16}
+          className={`admin-video-source-picker__chevron${open ? " is-open" : ""}`}
+          aria-hidden="true"
+        />
+      </button>
+
+      {open && (
+        <div
+          className="admin-video-source-picker__menu"
+          data-placement={menuPosition?.placement ?? "bottom"}
+          style={{
+            left: menuPosition?.left,
+            top: menuPosition?.top,
+            bottom: menuPosition?.bottom,
+            width: menuPosition?.width,
+            maxHeight: menuPosition?.maxHeight,
+            visibility: menuPosition ? "visible" : "hidden",
+          }}
+        >
+          <div className="admin-video-source-picker__search">
+            <Search size={14} aria-hidden="true" />
+            <input
+              ref={searchRef}
+              type="search"
+              value={query}
+              placeholder="搜索网盘或爬虫"
+              aria-label="搜索来源"
+              aria-controls={listboxId}
+              autoComplete="off"
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </div>
+          <div ref={listRef} id={listboxId} className="admin-video-source-picker__list" role="listbox" aria-label="来源">
+            {!normalizedQuery && (
+              <button
+                type="button"
+                role="option"
+                tabIndex={-1}
+                aria-selected={selectedKind === null}
+                className={`admin-video-source-picker__option is-all${selectedKind === null ? " is-selected" : ""}`}
+                onClick={() => selectSource(null, "")}
+              >
+                <VideoSourcePickerIcon />
+                <span className="admin-video-source-picker__option-copy">
+                  <strong>全部来源</strong>
+                </span>
+                {selectedKind === null && <Check size={16} aria-hidden="true" />}
+              </button>
+            )}
+
+            {filteredDrives.length > 0 && (
+              <div className="admin-video-source-picker__group" role="group" aria-label="网盘">
+                <div className="admin-video-source-picker__group-title" aria-hidden="true">
+                  <span>网盘</span>
+                </div>
+                {filteredDrives.map((drive) => {
+                  const selected = selectedKind === "drive" && drive.id === driveId;
+                  return (
+                    <button
+                      key={drive.id}
+                      type="button"
+                      role="option"
+                      tabIndex={-1}
+                      aria-selected={selected}
+                      className={`admin-video-source-picker__option${selected ? " is-selected" : ""}`}
+                      onClick={() => selectSource("drive", drive.id)}
+                    >
+                      <VideoSourcePickerIcon drive={drive} />
+                      <span className="admin-video-source-picker__option-copy">
+                        <strong>{drive.name || drive.id}</strong>
+                      </span>
+                      {selected && <Check size={16} aria-hidden="true" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {filteredCrawlers.length > 0 && (
+              <div className="admin-video-source-picker__group" role="group" aria-label="爬虫">
+                <div className="admin-video-source-picker__group-title" aria-hidden="true">
+                  <span>爬虫</span>
+                </div>
+                {filteredCrawlers.map((crawler) => {
+                  const selected = selectedKind === "crawler" && crawler.id === crawlerId;
+                  return (
+                    <button
+                      key={crawler.id}
+                      type="button"
+                      role="option"
+                      tabIndex={-1}
+                      aria-selected={selected}
+                      className={`admin-video-source-picker__option${selected ? " is-selected" : ""}`}
+                      onClick={() => selectSource("crawler", crawler.id)}
+                    >
+                      <VideoSourcePickerIcon crawler={crawler} />
+                      <span className="admin-video-source-picker__option-copy">
+                        <strong>{crawler.name || crawler.id}</strong>
+                      </span>
+                      {selected && <Check size={16} aria-hidden="true" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {normalizedQuery && !hasMatches && (
+              <div className="admin-video-source-picker__empty">没有匹配的来源</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VideoSourcePickerIcon({
+  drive,
+  crawler,
+}: {
+  drive?: api.AdminDrive;
+  crawler?: api.AdminCrawler;
+}) {
+  if (drive) {
+    const iconSrc = driveKindIconPath(drive.kind);
+    return (
+      <span
+        className={`admin-video-source-picker__icon is-drive${iconSrc ? " has-image" : ""}`}
+        data-kind={drive.kind}
+        aria-hidden="true"
+      >
+        {iconSrc ? <img src={iconSrc} alt="" /> : driveKindAbbr(drive.kind)}
+      </span>
+    );
+  }
+  if (crawler) {
+    return (
+      <span className="admin-video-source-picker__icon is-crawler" aria-hidden="true">
+        <SpiderIcon />
+      </span>
+    );
+  }
+  return (
+    <span className="admin-video-source-picker__icon is-all" aria-hidden="true">
+      全
+    </span>
+  );
+}
+
+function SpiderIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 4v2l5 5M2.5 9.5 4 11h6M4 19v-2l6-6" />
+      <path d="M19 4v2l-5 5M21.5 9.5 20 11h-6M20 19v-2l-6-6" />
+      <circle cx="12" cy="15" r="4" />
+      <circle cx="12" cy="9" r="2" />
+    </svg>
+  );
+}
+
+function AdvancedVideoFilters({
+  value,
+  drives,
+  crawlers,
+  onChange,
+  onSubmit,
+}: {
+  value: VideoAdvancedFilterValues;
+  drives: api.AdminDrive[];
+  crawlers: api.AdminCrawler[];
+  onChange: (value: VideoAdvancedFilterValues) => void;
+  onSubmit: (event: React.FormEvent) => void;
+}) {
+  function updateField(key: keyof VideoAdvancedFilterValues, nextValue: string) {
+    onChange({ ...value, [key]: nextValue });
+  }
+
+  const today = localDateInputValue(new Date());
+
+  return (
+    <form
+      id="admin-video-advanced-filters"
+      className="admin-video-advanced-filters"
+      aria-label="视频高级筛选"
+      onSubmit={onSubmit}
+    >
+      <div className="admin-video-advanced-filters__grid">
+        <div className="admin-video-advanced-field admin-video-advanced-field--source">
+          <span>来源</span>
+          <VideoSourcePicker
+            driveId={value.driveId}
+            crawlerId={value.crawlerId}
+            drives={drives}
+            crawlers={crawlers}
+            onChange={(kind, id) => {
+              onChange({
+                ...value,
+                driveId: kind === "drive" ? id : "",
+                crawlerId: kind === "crawler" ? id : "",
+              });
+            }}
+          />
+        </div>
+
+        <fieldset className="admin-video-advanced-range">
+          <legend>入库时间</legend>
+          <div className="admin-video-advanced-range__inputs is-date-range">
+            <label>
+              {!value.createdFrom && (
+                <span className="admin-video-advanced-range__placeholder" aria-hidden="true">
+                  年/月/日
+                </span>
+              )}
+              <input
+                type="date"
+                className={!value.createdFrom ? "is-empty" : undefined}
+                aria-label="入库开始日期"
+                value={value.createdFrom}
+                max={earlierDateInputValue(value.createdTo, today)}
+                onClick={(event) => openNativeDatePicker(event.currentTarget)}
+                onChange={(event) => updateField("createdFrom", event.target.value)}
+              />
+            </label>
+            <span className="admin-video-advanced-range__separator">至</span>
+            <label>
+              {!value.createdTo && (
+                <span className="admin-video-advanced-range__placeholder" aria-hidden="true">
+                  年/月/日
+                </span>
+              )}
+              <input
+                type="date"
+                className={!value.createdTo ? "is-empty" : undefined}
+                aria-label="入库截止日期"
+                value={value.createdTo}
+                min={value.createdFrom || undefined}
+                max={today}
+                onClick={(event) => openNativeDatePicker(event.currentTarget)}
+                onChange={(event) => updateField("createdTo", event.target.value)}
+              />
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset className="admin-video-advanced-range">
+          <legend>视频时长(分钟)</legend>
+          <div className="admin-video-advanced-range__inputs is-duration-range">
+            <label>
+              <input
+                type="number"
+                aria-label="视频最短时长（分钟）"
+                min={1}
+                max={525600}
+                step={1}
+                inputMode="numeric"
+                placeholder="不限"
+                value={value.durationMinMinutes}
+                onChange={(event) => updateField("durationMinMinutes", event.target.value)}
+              />
+            </label>
+            <span className="admin-video-advanced-range__separator">至</span>
+            <label>
+              <input
+                type="number"
+                aria-label="视频最长时长（分钟）"
+                min={value.durationMinMinutes || 1}
+                max={525600}
+                step={1}
+                inputMode="numeric"
+                placeholder="不限"
+                value={value.durationMaxMinutes}
+                onChange={(event) => updateField("durationMaxMinutes", event.target.value)}
+              />
+            </label>
+          </div>
+        </fieldset>
+      </div>
+    </form>
+  );
+}
+
 function SearchBox({
   keyword,
   onChange,
@@ -1290,31 +1937,48 @@ function EditVideoModal({
   return (
     <Modal
       open
+      title="编辑视频"
       ariaLabel="编辑视频"
       className="admin-modal--video-edit"
       onClose={onClose}
       footer={
         <>
-          <button type="button" className="admin-btn" onClick={onClose}>
-            取消
-          </button>
-          <button type="button" className="admin-btn is-primary" onClick={handleSave} disabled={saving}>
-            {saving ? "保存中..." : "保存"}
-          </button>
+          <Link
+            className="admin-btn admin-video-edit-view-link"
+            to={`/video/${encodeURIComponent(video.id)}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            查看视频播放页
+          </Link>
+          <div className="admin-video-edit-footer-actions">
+            <button type="button" className="admin-btn" onClick={onClose}>
+              取消
+            </button>
+            <button type="button" className="admin-btn is-primary" onClick={handleSave} disabled={saving}>
+              {saving ? "保存中..." : "保存"}
+            </button>
+          </div>
         </>
       }
     >
-      <div className="admin-form">
-        <div className="admin-form__row">
-          <label htmlFor={`${idPrefix}-video-title`}>标题</label>
-          <input id={`${idPrefix}-video-title`} value={title} onChange={(e) => setTitle(e.target.value)} />
-        </div>
-        <div className="admin-form__row">
-          <label htmlFor={`${idPrefix}-video-author`}>作者</label>
-          <input id={`${idPrefix}-video-author`} value={author} onChange={(e) => setAuthor(e.target.value)} />
-        </div>
-        <div className="admin-form__row">
-          <div className="admin-form__label">标签</div>
+      <div className="admin-form admin-video-edit-form">
+        <section className="admin-video-edit-section">
+          <h3>基本信息</h3>
+          <div className="admin-video-edit-basics">
+            <div className="admin-form__row">
+              <label htmlFor={`${idPrefix}-video-title`}>标题</label>
+              <input id={`${idPrefix}-video-title`} value={title} onChange={(e) => setTitle(e.target.value)} />
+            </div>
+            <div className="admin-form__row">
+              <label htmlFor={`${idPrefix}-video-author`}>作者</label>
+              <input id={`${idPrefix}-video-author`} value={author} onChange={(e) => setAuthor(e.target.value)} />
+            </div>
+          </div>
+        </section>
+
+        <section className="admin-video-edit-section">
+          <h3>标签</h3>
           <div className="admin-tag-picker admin-video-tag-picker">
             {availableTags.map((tag) => (
               <label key={tag.id} className="admin-check admin-video-tag-option">
@@ -1324,37 +1988,38 @@ function EditVideoModal({
                   onChange={() => setSelectedTags(toggleTag(selectedTags, tag.label))}
                 />
                 <span className="admin-video-tag-option__label" title={tag.label}>{tag.label}</span>
-                {video.tagSources?.[tag.label] && (
-                  <span
-                    className="admin-video-tag-option__source"
-                    data-source={video.tagSources[tag.label]}
-                    title={video.tagEvidence?.[tag.label] || tagAssignmentSourceLabel(video.tagSources[tag.label])}
-                  >
-                    {tagAssignmentSourceLabel(video.tagSources[tag.label])}
-                  </span>
-                )}
               </label>
             ))}
           </div>
-        </div>
-        <dl className="admin-kv" style={{ marginTop: 8 }}>
-          <dt>来源盘</dt>
-          <dd>{video.driveId}</dd>
-          <dt>文件信息</dt>
-          <dd>{fileMeta(video) || "—"}</dd>
-          <dt>预览视频</dt>
-          <dd className="admin-video-preview-actions">
-            <PreviewStatus s={previewGenerating ? REGEN_PREVIEW_STATUS : video.previewStatus} />
-            <button
-              type="button"
-              className="admin-btn admin-video-preview-button"
-              onClick={handleRegenPreview}
-              disabled={saving || previewBusy}
-            >
-              {previewBusy ? "生成中..." : "重新生成预览"}
-            </button>
-          </dd>
-        </dl>
+        </section>
+
+        <section className="admin-video-edit-section">
+          <h3>视频信息</h3>
+          <dl className="admin-video-edit-meta">
+            <div className="admin-video-edit-meta__item">
+              <dt>来源盘</dt>
+              <dd>{video.driveId}</dd>
+            </div>
+            <div className="admin-video-edit-meta__item">
+              <dt>文件信息</dt>
+              <dd>{fileMeta(video) || "—"}</dd>
+            </div>
+            <div className="admin-video-edit-meta__item is-preview">
+              <dt>预览视频</dt>
+              <dd className="admin-video-preview-actions">
+                <PreviewStatus s={previewGenerating ? REGEN_PREVIEW_STATUS : video.previewStatus} />
+                <button
+                  type="button"
+                  className="admin-btn admin-video-preview-button"
+                  onClick={handleRegenPreview}
+                  disabled={saving || previewBusy}
+                >
+                  {previewBusy ? "生成中..." : "重新生成预览"}
+                </button>
+              </dd>
+            </div>
+          </dl>
+        </section>
       </div>
     </Modal>
   );
@@ -1389,6 +2054,46 @@ function fileMetaParts(v: api.AdminVideo): string[] {
 function normalizeExt(ext: string): string {
   const value = (ext ?? "").replace(/^\./, "").trim();
   return value ? value.toUpperCase() : "";
+}
+
+function countVideoAdvancedFilters(value: VideoAdvancedFilterValues): number {
+  let count = 0;
+  if (value.driveId || value.crawlerId) count++;
+  if (value.createdFrom || value.createdTo) count++;
+  if (value.durationMinMinutes || value.durationMaxMinutes) count++;
+  return count;
+}
+
+function dateRangeIsReversed(from: string, to: string): boolean {
+  return !!from && !!to && from > to;
+}
+
+function dateIsAfter(value: string, maximum: string): boolean {
+  return !!value && value > maximum;
+}
+
+function earlierDateInputValue(value: string, maximum: string): string {
+  return value && value < maximum ? value : maximum;
+}
+
+function localDateInputValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function numberRangeIsReversed(min: string, max: string): boolean {
+  return !!min && !!max && Number(min) > Number(max);
+}
+
+function openNativeDatePicker(input: HTMLInputElement) {
+  if (typeof input.showPicker !== "function") return;
+  try {
+    input.showPicker();
+  } catch {
+    // Some browsers expose showPicker but restrict when it may be called.
+  }
 }
 
 function toggleTag(tags: string[], label: string): string[] {

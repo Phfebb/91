@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -24,11 +26,33 @@ func (a *AdminServer) handleAdminListVideos(w http.ResponseWriter, r *http.Reque
 	if size <= 0 || size > 100 {
 		size = 100
 	}
+	createdAtFrom, createdAtBefore, err := parseAdminVideoDateRange(
+		q.Get("createdFrom"),
+		q.Get("createdTo"),
+		"入库时间",
+	)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	durationSecondsMin, durationSecondsMax, err := parseAdminVideoDurationRange(
+		q.Get("durationMinMinutes"),
+		q.Get("durationMaxMinutes"),
+	)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
 	items, total, err := a.Catalog.ListVideos(r.Context(), catalog.ListParams{
-		Keyword:  q.Get("keyword"),
-		DriveID:  q.Get("driveId"),
-		Page:     page,
-		PageSize: size,
+		Keyword:            q.Get("keyword"),
+		DriveID:            q.Get("driveId"),
+		CrawlerID:          strings.TrimSpace(q.Get("crawlerId")),
+		CreatedAtFrom:      createdAtFrom,
+		CreatedAtBefore:    createdAtBefore,
+		DurationSecondsMin: durationSecondsMin,
+		DurationSecondsMax: durationSecondsMax,
+		Page:               page,
+		PageSize:           size,
 	})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
@@ -77,6 +101,72 @@ func (a *AdminServer) handleAdminListVideos(w http.ResponseWriter, r *http.Reque
 		"page":  page,
 		"size":  size,
 	})
+}
+
+const adminVideoDateLayout = "2006-01-02"
+
+// parseAdminVideoDateRange converts inclusive date inputs into an inclusive
+// start and exclusive next-day boundary in the server's local timezone.
+func parseAdminVideoDateRange(fromRaw, toRaw, label string) (from, before int64, err error) {
+	fromRaw = strings.TrimSpace(fromRaw)
+	toRaw = strings.TrimSpace(toRaw)
+	now := time.Now().In(time.Local)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+	if fromRaw != "" {
+		parsed, parseErr := time.ParseInLocation(adminVideoDateLayout, fromRaw, time.Local)
+		if parseErr != nil {
+			return 0, 0, fmt.Errorf("%s开始日期格式无效，应为 YYYY-MM-DD", label)
+		}
+		if parsed.After(today) {
+			return 0, 0, fmt.Errorf("%s开始日期不能超过当天", label)
+		}
+		from = parsed.UnixMilli()
+	}
+	if toRaw != "" {
+		parsed, parseErr := time.ParseInLocation(adminVideoDateLayout, toRaw, time.Local)
+		if parseErr != nil {
+			return 0, 0, fmt.Errorf("%s结束日期格式无效，应为 YYYY-MM-DD", label)
+		}
+		if parsed.After(today) {
+			return 0, 0, fmt.Errorf("%s结束日期不能超过当天", label)
+		}
+		before = parsed.AddDate(0, 0, 1).UnixMilli()
+	}
+	if from > 0 && before > 0 && from >= before {
+		return 0, 0, fmt.Errorf("%s开始日期不能晚于结束日期", label)
+	}
+	return from, before, nil
+}
+
+const adminVideoMaxDurationMinutes = 365 * 24 * 60
+
+// parseAdminVideoDurationRange converts an inclusive whole-minute range into
+// seconds, matching the catalog's duration_seconds storage unit.
+func parseAdminVideoDurationRange(minRaw, maxRaw string) (minSeconds, maxSeconds int, err error) {
+	parseMinutes := func(raw, boundary string) (int, error) {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			return 0, nil
+		}
+		minutes, parseErr := strconv.Atoi(raw)
+		if parseErr != nil || minutes <= 0 || minutes > adminVideoMaxDurationMinutes {
+			return 0, fmt.Errorf("视频时长%s必须为大于 0 的整数分钟", boundary)
+		}
+		return minutes, nil
+	}
+
+	minMinutes, err := parseMinutes(minRaw, "最短值")
+	if err != nil {
+		return 0, 0, err
+	}
+	maxMinutes, err := parseMinutes(maxRaw, "最长值")
+	if err != nil {
+		return 0, 0, err
+	}
+	if minMinutes > 0 && maxMinutes > 0 && minMinutes > maxMinutes {
+		return 0, 0, fmt.Errorf("视频时长最短值不能大于最长值")
+	}
+	return minMinutes * 60, maxMinutes * 60, nil
 }
 
 // handleVideoStats 返回后台视频管理两个标签页的计数（当前/拉黑）。

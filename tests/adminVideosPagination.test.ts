@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 const videosPageSource = readFileSync(new URL("../src/admin/VideosPage.tsx", import.meta.url), "utf8");
+const apiSource = readFileSync(new URL("../src/admin/api.ts", import.meta.url), "utf8");
 const emptyVisualSource = readFileSync(new URL("../src/admin/AdminEmptyVisual.tsx", import.meta.url), "utf8");
 const adminCss = readFileSync(new URL("../src/styles/admin.css", import.meta.url), "utf8");
 
@@ -21,7 +22,107 @@ test("normal videos use ten items while blacklist remains responsive", () => {
   assert.match(videosPageSource, /window\.matchMedia\(VIDEOS_MOBILE_QUERY\)/);
   assert.match(videosPageSource, /function CurrentVideosTab[\s\S]*?const pageSize = NORMAL_VIDEOS_PAGE_SIZE;/);
   assert.match(videosPageSource, /function BlacklistTab[\s\S]*?const pageSize = useVideosPageSize\(\);/);
-  assert.match(videosPageSource, /api\.listVideos\(\{ page, size: pageSize, keyword: searchKeyword \}\)/);
+  assert.match(videosPageSource, /api\.listVideos\(\{[\s\S]*?page,[\s\S]*?size: pageSize,[\s\S]*?keyword: searchKeyword,[\s\S]*?\.\.\.appliedFilters/);
+});
+
+test("normal videos support composable advanced filters", () => {
+  const clearFiltersSource = videosPageSource.slice(
+    videosPageSource.indexOf("function clearAdvancedFilters"),
+    videosPageSource.indexOf("\n\n  return (", videosPageSource.indexOf("function clearAdvancedFilters"))
+  );
+  const sourcePickerSource = videosPageSource.slice(
+    videosPageSource.indexOf("function VideoSourcePicker"),
+    videosPageSource.indexOf("function AdvancedVideoFilters")
+  );
+  const advancedFilterSource = videosPageSource.slice(
+    videosPageSource.indexOf("function AdvancedVideoFilters"),
+    videosPageSource.indexOf("function SearchBox")
+  );
+  assert.match(videosPageSource, /className="admin-video-advanced-filters"/);
+  assert.match(videosPageSource, /aria-haspopup="dialog"/);
+  assert.match(videosPageSource, /<Modal[\s\S]*?open=\{advancedFiltersOpen\}[\s\S]*?title="高级筛选"/);
+  assert.match(advancedFilterSource, /<span>来源<\/span>[\s\S]*?<VideoSourcePicker/);
+  assert.match(sourcePickerSource, /aria-haspopup="listbox"[\s\S]*?aria-expanded=\{open\}/);
+  assert.match(sourcePickerSource, /role="listbox" aria-label="来源"/);
+  assert.match(sourcePickerSource, /role="group" aria-label="网盘"/);
+  assert.match(sourcePickerSource, /role="group" aria-label="爬虫"/);
+  assert.match(sourcePickerSource, /placeholder="搜索网盘或爬虫"/);
+  assert.match(sourcePickerSource, /driveKindIconPath\(drive\.kind\)/);
+  assert.match(sourcePickerSource, /<SpiderIcon \/>/);
+  assert.doesNotMatch(sourcePickerSource, /<Bot\b/);
+  assert.match(sourcePickerSource, /document\.addEventListener\("pointerdown", closeOnOutsidePointer\)/);
+  assert.match(sourcePickerSource, /useLayoutEffect\(\(\) => \{[\s\S]*?getBoundingClientRect\(\)[\s\S]*?spaceBelow < 240 && spaceAbove > spaceBelow/);
+  assert.match(sourcePickerSource, /window\.addEventListener\("scroll", updateMenuPosition, true\)/);
+  assert.match(sourcePickerSource, /\[role="option"\]\[aria-selected="true"\][\s\S]*?scrollIntoView\(\{ block: "nearest" \}\)/);
+  assert.match(sourcePickerSource, /data-placement=\{menuPosition\?\.placement \?\? "bottom"\}/);
+  assert.match(sourcePickerSource, /visibility: menuPosition \? "visible" : "hidden"/);
+  assert.match(sourcePickerSource, /event\.key === "Escape" && open/);
+  assert.match(sourcePickerSource, /event\.key === "Tab"[\s\S]*?!pickerRoot\.contains\(activeElement\)[\s\S]*?setOpen\(false\)/);
+  assert.doesNotMatch(sourcePickerSource, /onBlur=|relatedTarget/);
+  assert.match(sourcePickerSource, /function openPicker\(focusTarget\?: "first" \| "last"\)/);
+  assert.doesNotMatch(sourcePickerSource, /searchRef\.current\?\.focus\(\)/);
+  assert.doesNotMatch(sourcePickerSource, /admin-video-source-picker__badge|<small>/);
+  assert.doesNotMatch(sourcePickerSource, />网盘与爬虫<|>PikPak<|>脚本爬虫</);
+  assert.doesNotMatch(sourcePickerSource, /filtered(?:Drives|Crawlers)\.length\}[^)]*<\/div>/);
+  assert.equal(Array.from(sourcePickerSource.matchAll(/<select/g)).length, 0);
+  assert.doesNotMatch(videosPageSource, /<optgroup|<option value="">全部来源/);
+  assert.match(adminCss, /\.admin-video-advanced-range__inputs\s*\{[^}]*grid-template-columns:\s*max-content auto max-content;[^}]*margin-top:\s*var\(--space-2\);/s);
+  assert.match(adminCss, /input\[type="date"\]\s*\{[^}]*width:\s*136px;/s);
+  assert.match(adminCss, /input\[type="number"\]\s*\{[^}]*width:\s*104px;/s);
+  assert.doesNotMatch(adminCss, /\.admin-video-source-picker__badge/);
+  assert.match(adminCss, /\.admin-video-source-picker__menu\s*\{[^}]*position:\s*fixed;[^}]*z-index:\s*calc\(var\(--z-modal\) \+ 1\);[^}]*display:\s*flex;/s);
+  assert.match(adminCss, /\.admin-video-source-picker__list\s*\{[^}]*flex:\s*1 1 auto;[^}]*min-height:\s*0;/s);
+  assert.doesNotMatch(adminCss, /\.admin-video-source-picker\.is-open \.admin-video-source-picker__trigger/);
+  assert.doesNotMatch(adminCss, /\.admin-video-source-picker__group-title span:last-child/);
+  assert.match(videosPageSource, /<legend>入库时间<\/legend>/);
+  assert.match(videosPageSource, /<legend>视频时长\(分钟\)<\/legend>/);
+  assert.equal(Array.from(advancedFilterSource.matchAll(/admin-video-advanced-range__placeholder/g)).length, 2);
+  assert.equal(Array.from(advancedFilterSource.matchAll(/年\/月\/日/g)).length, 2);
+  assert.match(videosPageSource, />\s*应用\s*<\/button>/);
+  assert.doesNotMatch(videosPageSource, /应用筛选/);
+  assert.doesNotMatch(advancedFilterSource, /<span>(开始|结束|最短|最长)<\/span>/);
+  assert.doesNotMatch(advancedFilterSource, /入库日期包含开始和结束当天|视频时长按分钟计算/);
+  assert.doesNotMatch(adminCss, /\.admin-video-advanced-filters__hint/);
+  for (const label of ["入库开始日期", "入库截止日期", "视频最短时长（分钟）", "视频最长时长（分钟）"]) {
+    assert.match(advancedFilterSource, new RegExp(`aria-label="${label}"`));
+  }
+  assert.match(videosPageSource, /type="number"[\s\S]*?value=\{value\.durationMinMinutes\}/);
+  assert.match(videosPageSource, /type="number"[\s\S]*?value=\{value\.durationMaxMinutes\}/);
+  assert.equal(Array.from(videosPageSource.matchAll(/type="date"/g)).length, 2);
+  assert.match(
+    advancedFilterSource,
+    /value=\{value\.createdFrom\}[\s\S]*?max=\{earlierDateInputValue\(value\.createdTo, today\)\}/
+  );
+  assert.match(advancedFilterSource, /value=\{value\.createdTo\}[\s\S]*?max=\{today\}/);
+  assert.match(videosPageSource, /function localDateInputValue\(date: Date\): string/);
+  assert.match(videosPageSource, /show\("入库时间不能超过当天", "error"\)/);
+  assert.equal(
+    Array.from(
+      videosPageSource.matchAll(/onClick=\{\(event\) => openNativeDatePicker\(event\.currentTarget\)\}/g)
+    ).length,
+    2
+  );
+  assert.match(videosPageSource, /function openNativeDatePicker\(input: HTMLInputElement\)[\s\S]*?input\.showPicker\(\)/);
+  assert.doesNotMatch(videosPageSource, /视频时间|publishedFrom|publishedTo/);
+  assert.match(videosPageSource, /Promise\.all\(\[api\.listTags\(\), api\.listDrives\(\), api\.listCrawlers\(\)\]\)/);
+  assert.match(videosPageSource, /setAppliedFilters\(\{ \.\.\.draftFilters \}\)/);
+  assert.match(clearFiltersSource, /setDraftFilters\(\{ \.\.\.EMPTY_VIDEO_FILTERS \}\)/);
+  assert.doesNotMatch(clearFiltersSource, /setAppliedFilters|setPage|setAdvancedFiltersOpen/);
+  assert.match(videosPageSource, /const activeAdvancedFilterCount = countVideoAdvancedFilters\(appliedFilters\);/);
+  for (const key of ["driveId", "crawlerId", "createdFrom", "createdTo", "durationMinMinutes", "durationMaxMinutes"]) {
+    assert.match(apiSource, new RegExp(`if \\(params\\.${key}\\) qs\\.set\\("${key}", params\\.${key}\\)`));
+  }
+  assert.doesNotMatch(apiSource, /publishedFrom|publishedTo/);
+  assert.match(adminCss, /\.admin-modal\.admin-modal--video-filters\s*\{[^}]*width\s*:\s*min\(700px,\s*100%\)/s);
+  assert.match(adminCss, /\.admin-video-advanced-filters__grid\s*\{[^}]*grid-template-columns\s*:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
+  assert.match(adminCss, /\.admin-modal--video-filters \.admin-video-source-picker,\s*\.admin-modal--video-filters \.admin-video-advanced-range__inputs\s*\{[^}]*width:\s*min\(100%,\s*294px\);[^}]*margin-inline:\s*auto/s);
+  assert.match(adminCss, /@media \(max-width: 520px\)[\s\S]*?\.admin-video-advanced-range__inputs\s*\{[^}]*margin-top:\s*8px/s);
+  assert.match(adminCss, /@media \(max-width: 520px\)[\s\S]*?\.admin-video-advanced-range__inputs\.is-date-range\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\) auto minmax\(0,\s*1fr\)/s);
+  assert.match(adminCss, /@media \(max-width: 520px\)[\s\S]*?\.admin-video-advanced-range__inputs\.is-duration-range\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\) auto minmax\(0,\s*1fr\)/s);
+  assert.match(adminCss, /@media \(max-width: 520px\)[\s\S]*?\.admin-video-advanced-range input\[type="date"\],[\s\S]*?height:\s*40px;[^}]*border:\s*0;/s);
+  assert.match(adminCss, /\.admin-modal--video-filters \.admin-video-source-picker__trigger\s*\{[^}]*min-height:\s*42px;[^}]*border:\s*0;/s);
+  assert.match(adminCss, /\.admin-modal--video-filters \.admin-modal__footer\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*auto repeat\(2,\s*minmax\(0,\s*1fr\)\)/s);
+  assert.match(videosPageSource, /className="admin-btn admin-video-advanced-clear"/);
 });
 
 test("admin video searches debounce typed input before querying", () => {
@@ -73,7 +174,7 @@ test("empty video tabs use the correct visual and distinguish search misses", ()
     videosPageSource.indexOf("// ---------- 拉黑视频 ----------")
   );
   const blacklistSource = videosPageSource.slice(videosPageSource.indexOf("function BlacklistTab"));
-  assert.match(currentSource, /const hasActiveSearch = searchKeyword\.trim\(\)\.length > 0;/);
+  assert.match(currentSource, /const hasActiveSearch = searchKeyword\.trim\(\)\.length > 0 \|\| activeAdvancedFilterCount > 0;/);
   assert.match(blacklistSource, /const hasActiveSearch = searchKeyword\.trim\(\)\.length > 0;/);
   assert.match(currentSource, /const hasVideoActions = listItems\.length > 0;/);
   assert.match(blacklistSource, /const hasBlacklistActions = list\.length > 0;/);
