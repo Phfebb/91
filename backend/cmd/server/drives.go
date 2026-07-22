@@ -293,6 +293,7 @@ func (a *App) attachLocalUpload(ctx context.Context) error {
 	if err := drv.Init(ctx); err != nil {
 		return err
 	}
+	a.maintainLocalUploadFileNames(ctx)
 	a.registry.Set(drv.ID(), drv)
 
 	a.startDriveGenerationWorkers(ctx, drv.ID(), drv, true)

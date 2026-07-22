@@ -55,8 +55,8 @@ export default function UploadPage() {
       setFile(null);
       setTitle("");
       setTags([]);
-    } catch {
-      setError("上传失败，请检查文件格式后重试");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "上传失败，请检查文件格式后重试");
     } finally {
       setSaving(false);
     }

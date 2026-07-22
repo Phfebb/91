@@ -27,6 +27,7 @@ import (
 	"github.com/video-site/backend/internal/drives/localstorage"
 	"github.com/video-site/backend/internal/drives/localupload"
 	"github.com/video-site/backend/internal/proxy"
+	"github.com/video-site/backend/internal/videoname"
 )
 
 const localUploadDriveID = localupload.DriveID
@@ -632,13 +633,17 @@ func (s *Server) handleUploadVideo(w http.ResponseWriter, r *http.Request) {
 	if title == "" {
 		title = uploadTitleFromFileName(originalName)
 	}
+	if err := videoname.ValidateUploadTitle(title, ext); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
 
 	uploadID, err := newUploadID(now)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	storedName := uploadID + ext
+	storedName := videoname.UploadFileName(title, ext, uploadID, false)
 	dst, err := s.localUploadFilePath(storedName)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
@@ -650,10 +655,18 @@ func (s *Server) handleUploadVideo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if errors.Is(err, os.ErrExist) {
+		storedName = videoname.UploadFileName(title, ext, uploadID, true)
+		dst, err = s.localUploadFilePath(storedName)
+		if err == nil {
+			out, err = os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		}
+	}
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	title = videoname.TitleFromFileName(storedName)
 	size, copyErr := io.Copy(out, file)
 	closeErr := out.Close()
 	if copyErr != nil {
@@ -676,7 +689,7 @@ func (s *Server) handleUploadVideo(w http.ResponseWriter, r *http.Request) {
 		ID:            localUploadDriveID + "-" + uploadID,
 		DriveID:       localUploadDriveID,
 		FileID:        storedName,
-		FileName:      originalName,
+		FileName:      storedName,
 		Title:         title,
 		Author:        "用户上传",
 		Size:          size,

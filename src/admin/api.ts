@@ -729,8 +729,6 @@ export function startBlacklistSourceDelete(
 }
 
 export type UpdateVideoInput = Partial<{
-  title: string;
-  author: string;
   tags: string[];
   badges: string[];
   description: string;

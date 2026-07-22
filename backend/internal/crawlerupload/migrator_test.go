@@ -153,6 +153,9 @@ func TestRunOnceUploadsScriptCrawlerLocalVideo(t *testing.T) {
 	if got.FileName != wantName {
 		t.Fatalf("file_name = %q, want %q", got.FileName, wantName)
 	}
+	if got.Title != strings.TrimSuffix(wantName, filepath.Ext(wantName)) {
+		t.Fatalf("title = %q, want uploaded filename without extension", got.Title)
+	}
 	if _, err := os.Stat(filepath.Join(src.VideosDir(), "source-001.mp4")); !os.IsNotExist(err) {
 		t.Fatalf("local video still exists or stat failed: %v", err)
 	}

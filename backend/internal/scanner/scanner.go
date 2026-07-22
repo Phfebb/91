@@ -11,6 +11,7 @@ import (
 
 	"github.com/video-site/backend/internal/catalog"
 	"github.com/video-site/backend/internal/drives"
+	"github.com/video-site/backend/internal/videoname"
 )
 
 type Scanner struct {
@@ -179,8 +180,9 @@ func (s *Scanner) walk(ctx context.Context, dirID, dirName string, stats *Stats,
 		}
 
 		parsed := Parse(e.Name)
-		if parsed.Title == "" {
-			parsed.Title = strings.TrimSuffix(e.Name, ext)
+		displayTitle := videoname.TitleFromFileName(e.Name)
+		if displayTitle == "" {
+			displayTitle = strings.TrimSpace(e.Name)
 		}
 		assignments, err := s.Catalog.MatchTagAssignments(ctx, parsed.Title, e.Name, parsed.Author, dirName)
 		if err != nil {
@@ -194,11 +196,15 @@ func (s *Scanner) walk(ctx context.Context, dirID, dirName string, stats *Stats,
 			return err
 		}
 
-		existing, _ := s.Catalog.GetVideo(ctx, id)
+		existing, _ := s.Catalog.FindVideoByDriveFileID(ctx, s.Drive.ID(), e.ID)
+		if existing == nil {
+			existing, _ = s.Catalog.GetVideo(ctx, id)
+		}
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		if existing != nil {
+			recordID := existing.ID
 			patch := catalog.VideoMetaPatch{}
 			if e.Hash != "" && existing.ContentHash == "" {
 				patch.ContentHash = e.Hash
@@ -211,25 +217,28 @@ func (s *Scanner) walk(ctx context.Context, dirID, dirName string, stats *Stats,
 			if e.Name != "" && existing.FileName != e.Name {
 				patch.FileName = e.Name
 				existing.FileName = e.Name
-				patch.Title = parsed.Title
-				patch.TitleSet = true
 				patch.Author = parsed.Author
 				patch.AuthorSet = true
 			}
+			if existing.Title != displayTitle {
+				patch.Title = displayTitle
+				patch.TitleSet = true
+				existing.Title = displayTitle
+			}
 			if patch.ContentHash != "" || patch.FileName != "" || patch.DirName != "" || patch.TitleSet || patch.AuthorSet {
-				_ = s.Catalog.UpdateVideoMeta(ctx, id, patch)
+				_ = s.Catalog.UpdateVideoMeta(ctx, recordID, patch)
 				if err := ctx.Err(); err != nil {
 					return err
 				}
 			}
-			if dup := s.findDuplicate(ctx, e.Hash, e.Name, e.Size, id); dup != nil {
+			if dup := s.findDuplicate(ctx, e.Hash, e.Name, e.Size, recordID); dup != nil {
 				continue
 			}
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			if _, err := s.Catalog.ReplaceAutoVideoTags(ctx, id, assignments); err != nil {
-				log.Printf("[scanner] retag %s error: %v", id, err)
+			if _, err := s.Catalog.ReplaceAutoVideoTags(ctx, recordID, assignments); err != nil {
+				log.Printf("[scanner] retag %s error: %v", recordID, err)
 			}
 			if err := ctx.Err(); err != nil {
 				return err
@@ -253,7 +262,7 @@ func (s *Scanner) walk(ctx context.Context, dirID, dirName string, stats *Stats,
 			ContentHash:   e.Hash,
 			ParentID:      e.ParentID,
 			DirName:       dirName,
-			Title:         parsed.Title,
+			Title:         displayTitle,
 			Author:        parsed.Author,
 			Ext:           strings.TrimPrefix(ext, "."),
 			Quality:       "HD",

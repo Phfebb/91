@@ -1899,8 +1899,6 @@ function EditVideoModal({
   onSaved: () => void;
 }) {
   const idPrefix = useId();
-  const [title, setTitle] = useState(video.title);
-  const [author, setAuthor] = useState(video.author ?? "");
   const [selectedTags, setSelectedTags] = useState(video.tags ?? []);
   const [saving, setSaving] = useState(false);
   const [regeningPreview, setRegeningPreview] = useState(false);
@@ -1910,8 +1908,6 @@ function EditVideoModal({
     setSaving(true);
     try {
       await api.updateVideo(video.id, {
-        title: title.trim(),
-        author: author.trim(),
         tags: selectedTags,
       });
       show("已保存", "success");
@@ -1968,11 +1964,11 @@ function EditVideoModal({
           <div className="admin-video-edit-basics">
             <div className="admin-form__row">
               <label htmlFor={`${idPrefix}-video-title`}>标题</label>
-              <input id={`${idPrefix}-video-title`} value={title} onChange={(e) => setTitle(e.target.value)} />
+              <input id={`${idPrefix}-video-title`} value={video.title} readOnly aria-readonly="true" />
             </div>
             <div className="admin-form__row">
               <label htmlFor={`${idPrefix}-video-author`}>作者</label>
-              <input id={`${idPrefix}-video-author`} value={author} onChange={(e) => setAuthor(e.target.value)} />
+              <input id={`${idPrefix}-video-author`} value={video.author ?? ""} readOnly aria-readonly="true" />
             </div>
           </div>
         </section>

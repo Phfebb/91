@@ -38,6 +38,7 @@ import (
 	"github.com/video-site/backend/internal/drives/webdav"
 	"github.com/video-site/backend/internal/drives/wopan"
 	"github.com/video-site/backend/internal/mediaasset"
+	"github.com/video-site/backend/internal/videoname"
 )
 
 // uploadTarget 是 migrator 调用目标 drive 的最小接口。任何一种"接收爬虫上传"的
@@ -880,8 +881,12 @@ func (m *Migrator) migrateOne(ctx context.Context, v *catalog.Video, plan migrat
 	}
 	m.preserveCrawledThumbnail(ctx, src, v)
 	// 同步 catalog 里的 file_name，让下次目标盘扫盘时 (file_name, size) 也能匹配上
-	if err := m.cfg.Catalog.UpdateVideoMeta(ctx, v.ID, catalog.VideoMetaPatch{FileName: uploadName}); err != nil {
-		log.Printf("[crawlerupload] %s update file_name after migrate: %v", v.ID, err)
+	if err := m.cfg.Catalog.UpdateVideoMeta(ctx, v.ID, catalog.VideoMetaPatch{
+		FileName: uploadName,
+		Title:    videoname.TitleFromFileName(uploadName),
+		TitleSet: true,
+	}); err != nil {
+		log.Printf("[crawlerupload] %s update file_name/title after migrate: %v", v.ID, err)
 	}
 
 	// 删除本地 mp4 和源 thumb（公共 /p/thumb 副本已在 preserveCrawledThumbnail 中保留）。
@@ -902,8 +907,12 @@ func (m *Migrator) bindToExistingTarget(ctx context.Context, v, target *catalog.
 		return false, fmt.Errorf("catalog bind existing target: %w", err)
 	}
 	if target.FileName != "" {
-		if err := m.cfg.Catalog.UpdateVideoMeta(ctx, v.ID, catalog.VideoMetaPatch{FileName: target.FileName}); err != nil {
-			log.Printf("[crawlerupload] %s update file_name after duplicate bind: %v", v.ID, err)
+		if err := m.cfg.Catalog.UpdateVideoMeta(ctx, v.ID, catalog.VideoMetaPatch{
+			FileName: target.FileName,
+			Title:    videoname.TitleFromFileName(target.FileName),
+			TitleSet: true,
+		}); err != nil {
+			log.Printf("[crawlerupload] %s update file_name/title after duplicate bind: %v", v.ID, err)
 		}
 	}
 	m.preserveCrawledThumbnail(ctx, plan.source, v)

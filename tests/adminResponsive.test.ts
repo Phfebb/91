@@ -968,6 +968,10 @@ test("video edit modal stays focused on common metadata", () => {
   assert.doesNotMatch(videosPageSource, /badges:\s*splitList\(badges\)/);
   assert.doesNotMatch(videosPageSource, /thumbnail:\s*thumbnail\.trim\(\)/);
   assert.doesNotMatch(videosPageSource, /quality:\s*quality\.trim\(\)/);
+  assert.match(editModalSource, /id=\{`\$\{idPrefix\}-video-title`\}[\s\S]*?value=\{video\.title\}[\s\S]*?readOnly/);
+  assert.match(editModalSource, /id=\{`\$\{idPrefix\}-video-author`\}[\s\S]*?value=\{video\.author \?\? ""\}[\s\S]*?readOnly/);
+  assert.doesNotMatch(editModalSource, /title:\s*title\.trim\(\)/);
+  assert.doesNotMatch(editModalSource, /author:\s*author\.trim\(\)/);
   assert.doesNotMatch(editModalSource, /video-description|video-duration|技术信息（排查用）|内部视频 ID|网盘文件 ID/);
   assert.doesNotMatch(editModalSource, /const \[description, setDescription\]|const \[durationSec, setDurationSec\]/);
   assert.doesNotMatch(editModalSource, /description,|durationSeconds:/);

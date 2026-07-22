@@ -15,14 +15,14 @@ import (
 )
 
 type updateVideoReq struct {
-	Title       string   `json:"title"`
-	Author      string   `json:"author"`
-	Tags        []string `json:"tags"`
-	Badges      []string `json:"badges"`
-	Description string   `json:"description"`
-	Thumbnail   string   `json:"thumbnail"`
-	Quality     string   `json:"quality"`
-	DurationSec int      `json:"durationSeconds"`
+	Title       json.RawMessage `json:"title"`
+	Author      json.RawMessage `json:"author"`
+	Tags        []string        `json:"tags"`
+	Badges      []string        `json:"badges"`
+	Description string          `json:"description"`
+	Thumbnail   string          `json:"thumbnail"`
+	Quality     string          `json:"quality"`
+	DurationSec int             `json:"durationSeconds"`
 }
 
 type adminVideoDTO struct {
@@ -125,16 +125,14 @@ func (a *AdminServer) handleUpdateVideo(w http.ResponseWriter, r *http.Request) 
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
+	if len(body.Title) > 0 || len(body.Author) > 0 {
+		writeErr(w, http.StatusBadRequest, errors.New("video title and author are read-only"))
+		return
+	}
 	v, err := a.Catalog.GetVideo(r.Context(), id)
 	if err != nil {
 		writeErr(w, http.StatusNotFound, err)
 		return
-	}
-	if body.Title != "" {
-		v.Title = body.Title
-	}
-	if body.Author != "" {
-		v.Author = body.Author
 	}
 	if body.Badges != nil {
 		v.Badges = body.Badges

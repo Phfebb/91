@@ -26,6 +26,38 @@ import (
 	"github.com/video-site/backend/internal/drives/scriptcrawler"
 )
 
+func TestHandleUpdateVideoRejectsReadOnlyTitleAndAuthor(t *testing.T) {
+	ctx := context.Background()
+	cat, err := catalog.Open(t.TempDir() + "/catalog.db")
+	if err != nil {
+		t.Fatalf("open catalog: %v", err)
+	}
+	defer cat.Close()
+	now := time.Now()
+	if err := cat.UpsertVideo(ctx, &catalog.Video{
+		ID: "video-read-only", DriveID: "drive", FileID: "file", FileName: "file.mp4",
+		Title: "file", Author: "author", PublishedAt: now, CreatedAt: now, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("seed video: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPut, "/admin/api/videos/video-read-only", strings.NewReader(`{"title":"changed"}`))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", "video-read-only")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	rr := httptest.NewRecorder()
+	(&AdminServer{Catalog: cat}).handleUpdateVideo(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
+	}
+	got, err := cat.GetVideo(ctx, "video-read-only")
+	if err != nil {
+		t.Fatalf("get video: %v", err)
+	}
+	if got.Title != "file" || got.Author != "author" {
+		t.Fatalf("metadata changed: title=%q author=%q", got.Title, got.Author)
+	}
+}
+
 func TestHandleLoginReturnsForbiddenForBannedIP(t *testing.T) {
 	ctx := context.Background()
 	cat, err := catalog.Open(t.TempDir() + "/catalog.db")

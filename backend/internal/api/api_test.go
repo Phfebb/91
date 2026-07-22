@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -877,6 +878,9 @@ func TestHandleUploadVideoSavesFileVideoTagsAndQueuesPreview(t *testing.T) {
 	if got.Title != "用户上传标题" {
 		t.Fatalf("title = %q, want submitted title", got.Title)
 	}
+	if got.FileID != "用户上传标题.mp4" || got.FileName != got.FileID {
+		t.Fatalf("file identity = id %q name %q, want title-based physical name", got.FileID, got.FileName)
+	}
 	if !sameStringSet(got.Tags, []string{"奶子", "女大", "人妻", "后入", "制服", "美臀", "口交"}) {
 		t.Fatalf("tags = %#v, want selected tags", got.Tags)
 	}
@@ -926,6 +930,58 @@ func TestHandleUploadVideoDefaultsBlankTitleToOriginalFileName(t *testing.T) {
 	}
 	if got.Title != "holiday.clip.final" {
 		t.Fatalf("title = %q, want original file name without extension", got.Title)
+	}
+	if got.FileID != "holiday.clip.final.mp4" || got.FileName != got.FileID {
+		t.Fatalf("file identity = id %q name %q", got.FileID, got.FileName)
+	}
+}
+
+func TestHandleUploadVideoAddsStableSuffixOnFilenameCollision(t *testing.T) {
+	ctx := context.Background()
+	cat, err := catalog.Open(t.TempDir() + "/catalog.db")
+	if err != nil {
+		t.Fatalf("open catalog: %v", err)
+	}
+	defer cat.Close()
+	server := &Server{Catalog: cat, LocalDir: t.TempDir()}
+	for i := 0; i < 2; i++ {
+		req := multipartUploadRequest(t, map[string]string{"title": "同名视频"}, "clip.mp4", fmt.Sprintf("video-%d", i))
+		rr := httptest.NewRecorder()
+		server.handleUploadVideo(rr, req)
+		if rr.Code != http.StatusCreated {
+			t.Fatalf("upload %d status = %d body=%s", i, rr.Code, rr.Body.String())
+		}
+		if i == 1 {
+			var dto VideoDTO
+			if err := json.NewDecoder(rr.Body).Decode(&dto); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			got, err := cat.GetVideo(ctx, dto.ID)
+			if err != nil {
+				t.Fatalf("get: %v", err)
+			}
+			if !strings.HasPrefix(got.FileID, "同名视频-") || !strings.HasSuffix(got.FileID, ".mp4") {
+				t.Fatalf("collision file id = %q", got.FileID)
+			}
+			if got.Title != strings.TrimSuffix(got.FileID, ".mp4") {
+				t.Fatalf("title = %q file = %q", got.Title, got.FileID)
+			}
+		}
+	}
+}
+
+func TestHandleUploadVideoRejectsFilenameUnsafeTitle(t *testing.T) {
+	cat, err := catalog.Open(t.TempDir() + "/catalog.db")
+	if err != nil {
+		t.Fatalf("open catalog: %v", err)
+	}
+	defer cat.Close()
+	server := &Server{Catalog: cat, LocalDir: t.TempDir()}
+	req := multipartUploadRequest(t, map[string]string{"title": "bad/title"}, "clip.mp4", "video")
+	rr := httptest.NewRecorder()
+	server.handleUploadVideo(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d body=%s", rr.Code, rr.Body.String())
 	}
 }
 

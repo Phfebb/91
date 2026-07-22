@@ -364,6 +364,25 @@ func (c *Catalog) MigrateVideoToDrive(ctx context.Context, videoID, newDriveID, 
 	return nil
 }
 
+// UpdateVideoFileIdentity atomically updates the storage filename and display
+// title after a local physical file has been renamed.
+func (c *Catalog) UpdateVideoFileIdentity(ctx context.Context, videoID, fileID, fileName, title string) error {
+	if strings.TrimSpace(videoID) == "" || strings.TrimSpace(fileID) == "" || strings.TrimSpace(fileName) == "" || strings.TrimSpace(title) == "" {
+		return fmt.Errorf("catalog: update video file identity: empty value")
+	}
+	res, err := c.db.ExecContext(ctx, `
+UPDATE videos
+   SET file_id = ?, file_name = ?, title = ?, updated_at = ?
+ WHERE id = ?`, fileID, fileName, title, time.Now().UnixMilli(), videoID)
+	if err != nil {
+		return err
+	}
+	if rows, err := res.RowsAffected(); err == nil && rows == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 // ListVideosByDriveID 列出指定 drive 下所有未隐藏的视频，按 published_at 倒序。
 // crawler upload worker uses this to find local crawler rows before uploading
 // them to their configured target drive.
@@ -741,6 +760,23 @@ func (c *Catalog) CountVideosNeedingThumbnail(ctx context.Context, driveID strin
 
 func (c *Catalog) GetVideo(ctx context.Context, id string) (*Video, error) {
 	row := c.db.QueryRowContext(ctx, `SELECT `+allVideoCols+` FROM videos WHERE id = ?`, id)
+	return scanVideo(row)
+}
+
+// FindVideoByDriveFileID resolves the row that owns an actual provider file.
+// Migrated crawler rows preserve their original logical ID, so a scanner's
+// generated ID is not always the catalog ID.
+func (c *Catalog) FindVideoByDriveFileID(ctx context.Context, driveID, fileID string) (*Video, error) {
+	driveID = strings.TrimSpace(driveID)
+	fileID = strings.TrimSpace(fileID)
+	if driveID == "" || fileID == "" {
+		return nil, sql.ErrNoRows
+	}
+	row := c.db.QueryRowContext(ctx,
+		`SELECT `+allVideoCols+` FROM videos
+		 WHERE drive_id = ? AND file_id = ?
+		 ORDER BY created_at ASC, id ASC
+		 LIMIT 1`, driveID, fileID)
 	return scanVideo(row)
 }
 
