@@ -43,6 +43,19 @@ test("one-time share page is public and claims the fragment token", () => {
   assert.doesNotMatch(appSource, /path="\/tmp"/);
 });
 
+test("share page loads subtitles only from the player subtitle menu", () => {
+  const claimBlock = /consumeVideoShare\(token\)([\s\S]*?)\.catch\(/.exec(
+    sharePageSource
+  );
+  assert.ok(claimBlock);
+  assert.doesNotMatch(claimBlock[1], /fetchSharedVideoSubtitles/);
+  assert.match(
+    sharePageSource,
+    /function loadSubtitles\(\)[\s\S]*?fetchSharedVideoSubtitles\(claim\.shareId\)/
+  );
+  assert.match(sharePageSource, /loadSubtitles=\{loadSubtitles\}/);
+});
+
 test("used share page shows the supplied illustration and concise message", () => {
   assert.match(sharePageSource, /share-link-used\.webp/);
   assert.match(sharePageSource, /当前链接已失效/);

@@ -57,9 +57,7 @@ export function fetchVideoDetail(id: string): Promise<VideoDetail | null> {
 }
 
 export function fetchVideoSubtitles(id: string): Promise<VideoSubtitle[]> {
-  return apiGet<VideoSubtitle[]>(
-    `/api/video/${encodeURIComponent(id)}/subtitles`
-  ).catch(() => []);
+  return apiGet<VideoSubtitle[]>(`/api/video/${encodeURIComponent(id)}/subtitles`);
 }
 
 export function createVideoShare(id: string): Promise<{ url: string }> {
@@ -120,7 +118,7 @@ export function fetchSharedVideoSubtitles(
 ): Promise<VideoSubtitle[]> {
   return apiGet<VideoSubtitle[]>(
     `/api/share/${encodeURIComponent(shareId)}/subtitles`
-  ).catch(() => []);
+  );
 }
 
 export function recordSharedVideoView(

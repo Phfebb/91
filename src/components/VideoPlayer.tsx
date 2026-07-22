@@ -7,6 +7,10 @@ import {
 } from "react";
 import Artplayer, { type Option, type SettingOption } from "artplayer";
 import type Hls from "hls.js";
+import {
+  calculateFullscreenSubtitleBottom,
+  getFullscreenPlayerOrientation,
+} from "@/lib/fullscreenSubtitleLayout";
 import { diagnosePlaybackSource } from "@/lib/playbackError";
 import type { VideoSubtitle } from "@/types";
 
@@ -15,7 +19,7 @@ type Props = {
   src: string;
   poster: string;
   previewSrc?: string;
-  subtitles?: VideoSubtitle[];
+  loadSubtitles?: () => Promise<VideoSubtitle[]>;
   title: string;
   /**
    * 用户首次按下播放时触发。同一个 VideoPlayer 实例只会触发一次；
@@ -134,6 +138,10 @@ const FAST_RATE_HINT_CLASS = "video-player__art-rate-hint";
 const PLAYER_GESTURE_HUD_CLASS = "video-player__art-gesture-hud";
 const PLAYER_GESTURE_HUD_ICON_CLASS = "video-player__art-gesture-hud-icon";
 const PLAYER_GESTURE_HUD_VALUE_CLASS = "video-player__art-gesture-hud-value";
+const FULLSCREEN_SUBTITLE_BOTTOM_CSS_VAR =
+  "--video-player-subtitle-bottom";
+const FULLSCREEN_SUBTITLE_ORIENTATION_DATASET =
+  "videoPlayerSubtitleOrientation";
 const PLAYER_SPACE_HOTKEY_EXCLUDED_SELECTOR = [
   "input",
   "textarea",
@@ -158,14 +166,13 @@ const BRIGHTNESS_MAX = 1.35;
 const GESTURE_ACTIVATION_PX = 12;
 const GESTURE_DIRECTION_LOCK_RATIO = 1.2;
 const GESTURE_VERTICAL_SCALE = 1.15;
-const EMPTY_SUBTITLES: VideoSubtitle[] = [];
 const playerGestureHudTimers = new WeakMap<HTMLElement, number>();
 
 export function VideoPlayer({
   src,
   poster,
   previewSrc,
-  subtitles = EMPTY_SUBTITLES,
+  loadSubtitles,
   title,
   onFirstPlay,
 }: Props) {
@@ -173,6 +180,7 @@ export function VideoPlayer({
   const artRef = useRef<Artplayer | null>(null);
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
   const onFirstPlayRef = useRef<Props["onFirstPlay"]>(onFirstPlay);
+  const loadSubtitlesRef = useRef<Props["loadSubtitles"]>(loadSubtitles);
   const playedRef = useRef(false);
   const [retryNonce, setRetryNonce] = useState(0);
   const [playerError, setPlayerError] = useState<PlayerError | null>(null);
@@ -183,6 +191,10 @@ export function VideoPlayer({
   useEffect(() => {
     onFirstPlayRef.current = onFirstPlay;
   }, [onFirstPlay]);
+
+  useEffect(() => {
+    loadSubtitlesRef.current = loadSubtitles;
+  }, [loadSubtitles]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -197,7 +209,7 @@ export function VideoPlayer({
       src,
       poster,
       title,
-      subtitles,
+      loadSubtitlesRef,
       artRef,
       playedRef,
       onFirstPlayRef,
@@ -208,7 +220,7 @@ export function VideoPlayer({
     });
 
     return cleanupPlayer;
-  }, [poster, retryNonce, src, subtitles, title]);
+  }, [poster, retryNonce, src, title]);
 
   useEffect(() => {
     return () => {
@@ -340,7 +352,7 @@ function mountArtPlayer({
   mount,
   src,
   poster,
-  subtitles,
+  loadSubtitlesRef,
   title,
   artRef,
   playedRef,
@@ -353,7 +365,7 @@ function mountArtPlayer({
   mount: HTMLDivElement;
   src: string;
   poster: string;
-  subtitles: VideoSubtitle[];
+  loadSubtitlesRef: MutableRefObject<Props["loadSubtitles"]>;
   title: string;
   artRef: MutableRefObject<Artplayer | null>;
   playedRef: MutableRefObject<boolean>;
@@ -364,7 +376,7 @@ function mountArtPlayer({
   onGestureHud: (label: string, duration?: number) => void;
 }) {
   const sourceType = inferSourceType(src);
-  const subtitleTracks = playableSubtitles(subtitles);
+  const subtitleState: SubtitleLoadState = { status: "idle", subtitles: [] };
   const fastActiveRef = { current: false };
   const loadHlsSource = createHlsSourceLoader(onError);
   const enableOrientationControl = shouldEnableMobileOrientationControl();
@@ -413,7 +425,7 @@ function mountArtPlayer({
       preload: "metadata",
       playsInline: true,
     },
-    settings: createPlayerSettings(subtitleTracks),
+    settings: createPlayerSettings(subtitleState, requestSubtitles),
     controls: enableOrientationControl ? [createOrientationControl()] : [],
     contextmenu: [],
     cssVar: {
@@ -437,6 +449,41 @@ function mountArtPlayer({
   video.playbackRate = DEFAULT_SETTINGS.playbackRate;
   applyPlayerBrightness(art, DEFAULT_SETTINGS.brightness);
   art.url = src;
+
+  async function requestSubtitles() {
+    if (
+      subtitleState.status === "loading" ||
+      subtitleState.status === "loaded" ||
+      subtitleState.status === "empty"
+    ) {
+      return;
+    }
+    const loader = loadSubtitlesRef.current;
+    if (!loader) {
+      subtitleState.status = "empty";
+      updateSubtitleSetting(art, subtitleState, requestSubtitles);
+      return;
+    }
+    subtitleState.status = "loading";
+    setSubtitleSettingTooltip(art, "加载中");
+    art.notice.show = "正在加载字幕";
+    try {
+      const subtitles = playableSubtitles(await loader());
+      if (disposed) return;
+      subtitleState.subtitles = subtitles;
+      subtitleState.status = subtitles.length > 0 ? "loaded" : "empty";
+      updateSubtitleSetting(art, subtitleState, requestSubtitles);
+      art.notice.show =
+        subtitles.length > 0
+          ? `已加载 ${subtitles.length} 条字幕`
+          : "暂无可用字幕";
+    } catch {
+      if (disposed) return;
+      subtitleState.status = "error";
+      updateSubtitleSetting(art, subtitleState, requestSubtitles);
+      art.notice.show = "字幕加载失败，点击字幕重试";
+    }
+  }
 
   function preventContextMenu(event: Event) {
     event.preventDefault();
@@ -519,6 +566,10 @@ function mountArtPlayer({
   const unbindKeyboardHotkeys = bindPlayerKeyboardHotkeys(art);
   const unbindMobileFullscreenControlAutoHide =
     bindMobileFullscreenControlAutoHide(art);
+  const unbindFullscreenSubtitleLayout = bindFullscreenSubtitleLayout(
+    art,
+    video
+  );
   const unbindOrientationToggle = enableOrientationControl
     ? bindOrientationToggle(art)
     : noop;
@@ -547,6 +598,7 @@ function mountArtPlayer({
     unbindProgressPreview();
     unbindKeyboardHotkeys();
     unbindMobileFullscreenControlAutoHide();
+    unbindFullscreenSubtitleLayout();
     unbindOrientationToggle();
     setPlayerFastRateHint(art, false);
     mount.removeEventListener("contextmenu", preventContextMenu);
@@ -565,6 +617,75 @@ function mountArtPlayer({
       artRef.current = null;
     }
     onPreviewHover(null);
+  };
+}
+
+function bindFullscreenSubtitleLayout(
+  art: Artplayer,
+  video: HTMLVideoElement
+) {
+  const player = art.template.$player;
+  let active = true;
+  let updateFrame: number | null = null;
+
+  function updateLayout() {
+    updateFrame = null;
+    if (!active) return;
+    const orientation = getFullscreenPlayerOrientation(
+      player.clientWidth,
+      player.clientHeight
+    );
+    if (orientation === null) {
+      delete player.dataset[FULLSCREEN_SUBTITLE_ORIENTATION_DATASET];
+    } else {
+      player.dataset[FULLSCREEN_SUBTITLE_ORIENTATION_DATASET] = orientation;
+    }
+    const bottom = calculateFullscreenSubtitleBottom(
+      player.clientWidth,
+      player.clientHeight,
+      video.videoWidth,
+      video.videoHeight
+    );
+    if (bottom === null) {
+      player.style.removeProperty(FULLSCREEN_SUBTITLE_BOTTOM_CSS_VAR);
+      return;
+    }
+    player.style.setProperty(
+      FULLSCREEN_SUBTITLE_BOTTOM_CSS_VAR,
+      `${bottom.toFixed(2)}px`
+    );
+  }
+
+  function scheduleUpdate() {
+    if (!active) return;
+    if (updateFrame !== null) window.cancelAnimationFrame(updateFrame);
+    updateFrame = window.requestAnimationFrame(updateLayout);
+  }
+
+  const resizeObserver =
+    typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(scheduleUpdate);
+  resizeObserver?.observe(player);
+
+  art.on("video:loadedmetadata", scheduleUpdate);
+  art.on("resize", scheduleUpdate);
+  art.on("fullscreen", scheduleUpdate);
+  art.on("fullscreenWeb", scheduleUpdate);
+  art.on("aspectRatio", scheduleUpdate);
+  scheduleUpdate();
+
+  return () => {
+    active = false;
+    if (updateFrame !== null) window.cancelAnimationFrame(updateFrame);
+    resizeObserver?.disconnect();
+    art.off("video:loadedmetadata", scheduleUpdate);
+    art.off("resize", scheduleUpdate);
+    art.off("fullscreen", scheduleUpdate);
+    art.off("fullscreenWeb", scheduleUpdate);
+    art.off("aspectRatio", scheduleUpdate);
+    player.style.removeProperty(FULLSCREEN_SUBTITLE_BOTTOM_CSS_VAR);
+    delete player.dataset[FULLSCREEN_SUBTITLE_ORIENTATION_DATASET];
   };
 }
 
@@ -800,6 +921,14 @@ function createLoopSetting() {
 
 type PlayerSubtitle = VideoSubtitle & { type: "vtt" | "srt" | "ass" };
 type PlayerSetting = NonNullable<Option["settings"]>[number];
+type SubtitleLoadStatus = "idle" | "loading" | "loaded" | "empty" | "error";
+type SubtitleLoadState = {
+  status: SubtitleLoadStatus;
+  subtitles: PlayerSubtitle[];
+};
+type ArtSettingWithRender = Artplayer["setting"] & {
+  render: (settings?: SettingOption[]) => void;
+};
 
 function playableSubtitles(subtitles: VideoSubtitle[]): PlayerSubtitle[] {
   return subtitles.filter(
@@ -823,23 +952,76 @@ function subtitleOption(
   };
 }
 
-function createPlayerSettings(subtitles: PlayerSubtitle[]) {
-  return [createLoopSetting(), createSubtitleSetting(subtitles)];
+function createPlayerSettings(
+  state: SubtitleLoadState,
+  requestSubtitles: () => Promise<void>
+) {
+  return [createLoopSetting(), createSubtitleSetting(state, requestSubtitles)];
 }
 
-function createSubtitleSetting(subtitles: PlayerSubtitle[]): PlayerSetting {
+function updateSubtitleSetting(
+  art: Artplayer,
+  state: SubtitleLoadState,
+  requestSubtitles: () => Promise<void>
+) {
+  const keepOpen = art.setting.show;
+  const setting = art.setting as ArtSettingWithRender;
+  setting.update(createSubtitleSetting(state, requestSubtitles));
+  if (!keepOpen) return;
+  const subtitleSetting = setting.find("online-subtitle");
+  if (subtitleSetting?.selector?.length) {
+    setting.render(subtitleSetting.selector);
+  }
+  setting.show = true;
+}
+
+function setSubtitleSettingTooltip(art: Artplayer, tooltip: string) {
+  const setting = art.setting.find("online-subtitle");
+  if (!setting) return;
+  setting.tooltip = tooltip;
+  if (setting.$tooltip) setting.$tooltip.textContent = tooltip;
+}
+
+function createSubtitleSetting(
+  state: SubtitleLoadState,
+  requestSubtitles: () => Promise<void>
+): PlayerSetting {
+  const subtitles = state.subtitles;
+  const tooltip =
+    state.status === "empty"
+      ? "无字幕"
+      : state.status === "error"
+        ? "加载失败"
+        : state.status === "loading"
+          ? "加载中"
+          : state.status === "idle"
+            ? ""
+            : "关闭";
   return {
     name: "online-subtitle",
     html: "字幕",
-    tooltip: "关闭",
+    tooltip,
     selector: [
-      { html: "关闭", value: "off", default: true },
+      {
+        name: "online-subtitle-option-off",
+        html: "关闭",
+        value: "off",
+        default: true,
+      },
       ...subtitles.map((subtitle, index) => ({
+        name: `online-subtitle-option-${index}`,
         html: subtitleTrackLabel(subtitle, index),
         value: String(index),
         default: false,
       })),
     ],
+    mounted(panel) {
+      panel.addEventListener("click", () => {
+        if (state.status === "idle" || state.status === "error") {
+          void requestSubtitles();
+        }
+      });
+    },
     onSelect(this: Artplayer, item: SettingOption) {
       const value = String(item.value ?? "");
       if (value === "off") {

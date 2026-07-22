@@ -22,6 +22,52 @@ test("detail player poster uses full-frame contain scaling", () => {
   );
 });
 
+test("fullscreen subtitles follow the contained video frame and scale on desktop", () => {
+  assert.match(
+    playerSource,
+    /const unbindFullscreenSubtitleLayout = bindFullscreenSubtitleLayout\([\s\S]*?unbindFullscreenSubtitleLayout\(\)/s
+  );
+  assert.match(playerSource, /new ResizeObserver\(scheduleUpdate\)/);
+  assert.match(playerSource, /art\.on\("video:loadedmetadata", scheduleUpdate\)/);
+  assert.match(playerSource, /art\.on\("fullscreenWeb", scheduleUpdate\)/);
+  assert.match(playerSource, /art\.off\("fullscreenWeb", scheduleUpdate\)/);
+  assert.match(
+    detailCss,
+    /\.art-video-player\.art-fullscreen,[\s\S]*\.art-video-player\.art-fullscreen-web,[\s\S]*--art-subtitle-bottom:\s*var\(--video-player-subtitle-bottom, 15px\)/s
+  );
+  assert.match(
+    detailCss,
+    /@media \(hover: hover\) and \(pointer: fine\)[\s\S]*--art-subtitle-font-size:\s*clamp\(28px, 1\.8vw, 36px\)/s
+  );
+});
+
+test("mobile portrait subtitles stay fixed while landscape uses 28px", () => {
+  assert.match(
+    playerSource,
+    /getFullscreenPlayerOrientation\([\s\S]*player\.dataset\[FULLSCREEN_SUBTITLE_ORIENTATION_DATASET\] = orientation/s
+  );
+  assert.match(
+    playerSource,
+    /delete player\.dataset\[FULLSCREEN_SUBTITLE_ORIENTATION_DATASET\]/
+  );
+  assert.match(
+    detailCss,
+    /@media \(hover: none\) and \(pointer: coarse\)[\s\S]*--art-subtitle-font-size:\s*20px/s
+  );
+  assert.match(
+    detailCss,
+    /data-video-player-subtitle-orientation="landscape"\][\s\S]*--art-subtitle-font-size:\s*28px/s
+  );
+  assert.match(
+    detailCss,
+    /\.art-video-player\.art-fullscreen\.art-control-show\[data-video-player-subtitle-orientation="portrait"\][\s\S]*\.art-subtitle,[\s\S]*\.art-video-player\.art-fullscreen-web\.art-control-show\[data-video-player-subtitle-orientation="portrait"\][\s\S]*bottom:\s*var\(--art-subtitle-bottom\)/s
+  );
+  assert.doesNotMatch(
+    detailCss,
+    /art-control-show\[data-video-player-subtitle-orientation="landscape"\]/
+  );
+});
+
 test("detail player does not keep playback resume state", () => {
   assert.doesNotMatch(playerSource, /ResumePrompt/);
   assert.doesNotMatch(playerSource, /PlaybackRecord/);
@@ -64,8 +110,8 @@ test("detail player uses compact ArtPlayer settings panel on mobile", () => {
 });
 
 test("detail player exposes a non-persistent loop switch in ArtPlayer settings", () => {
-  assert.match(playerSource, /settings:\s*createPlayerSettings\(subtitleTracks\)/);
-  assert.match(playerSource, /return \[createLoopSetting\(\),\s*createSubtitleSetting\(subtitles\)\]/);
+  assert.match(playerSource, /settings:\s*createPlayerSettings\(subtitleState, requestSubtitles\)/);
+  assert.match(playerSource, /return \[createLoopSetting\(\), createSubtitleSetting\(state, requestSubtitles\)\]/);
   assert.match(playerSource, /function createLoopSetting\(\)/);
   assert.match(playerSource, /html:\s*"洗脑循环"/);
   assert.match(playerSource, /loop:\s*true/);
@@ -78,11 +124,39 @@ test("detail player exposes a non-persistent loop switch in ArtPlayer settings",
 
 test("detail player always exposes subtitle selector with default off and no offset setting", () => {
   assert.doesNotMatch(playerSource, /subtitleOffset/);
-  assert.match(playerSource, /function createSubtitleSetting\(subtitles: PlayerSubtitle\[\]\): PlayerSetting/);
+  assert.match(playerSource, /function createSubtitleSetting\([\s\S]*?state: SubtitleLoadState/);
   assert.match(playerSource, /html:\s*"字幕"/);
-  assert.match(playerSource, /tooltip:\s*"关闭"/);
-  assert.match(playerSource, /\{\s*html:\s*"关闭",\s*value:\s*"off",\s*default:\s*true\s*\}/);
+  assert.match(playerSource, /state\.status === "idle"[\s\S]*?\?\s*""/);
+  assert.doesNotMatch(playerSource, /点击加载/);
+  assert.match(playerSource, /art\.notice\.show = "正在加载字幕"/);
+  assert.doesNotMatch(playerSource, /正在加载字幕…/);
+  assert.match(
+    playerSource,
+    /name:\s*"online-subtitle-option-off"[\s\S]*?html:\s*"关闭"[\s\S]*?value:\s*"off"[\s\S]*?default:\s*true/
+  );
+  assert.match(
+    playerSource,
+    /name:\s*`online-subtitle-option-\$\{index\}`[\s\S]*?default:\s*false/
+  );
+  assert.match(
+    detailCss,
+    /\.video-player[\s\S]*?\.art-video-player[\s\S]*?\.art-settings[\s\S]*?\.art-setting-panel[\s\S]*?\.art-setting-item\[data-name\^="online-subtitle-option-"\]\s*\{\s*justify-content:\s*center;/
+  );
+  assert.match(
+    detailCss,
+    /\.video-player[\s\S]*?\.art-video-player[\s\S]*?\.art-settings[\s\S]*?\.art-setting-panel[\s\S]*?\.art-setting-item\[data-name\^="online-subtitle-option-"\][\s\S]*?> \.art-setting-item-left[\s\S]*?> \.art-setting-item-left-icon\s*\{\s*display:\s*none;/
+  );
+  assert.doesNotMatch(
+    detailCss,
+    /(?:^|\n)\s*\.art-setting-item-left-icon\s*\{\s*display:\s*none;/
+  );
   assert.match(playerSource, /default:\s*false/);
+  assert.match(playerSource, /mounted\(panel\)[\s\S]*?requestSubtitles\(\)/);
+  assert.match(playerSource, /setting\.update\(createSubtitleSetting/);
+  assert.doesNotMatch(playerSource, /art\.setting\.show = false/);
+  assert.match(playerSource, /setting\.render\(subtitleSetting\.selector\)/);
+  assert.match(playerSource, /setting\.show = true/);
+  assert.doesNotMatch(playerSource, /src, subtitles, title/);
   assert.doesNotMatch(playerSource, /option\.subtitle = subtitleOption/);
 });
 
@@ -356,7 +430,7 @@ test("detail player auto-hides controls during mobile fullscreen playback", () =
 test("detail player exits body-mounted web fullscreen before route cleanup", () => {
   const mountStart = playerSource.indexOf("function mountArtPlayer");
   const mountEnd = playerSource.indexOf(
-    "function bindPlayerKeyboardHotkeys",
+    "function bindFullscreenSubtitleLayout",
     mountStart
   );
   assert.ok(mountStart >= 0 && mountEnd > mountStart);

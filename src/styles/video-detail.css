@@ -125,6 +125,64 @@
   --art-tip-background: rgba(8, 9, 13, 0.78);
 }
 
+/* ArtPlayer 会在运行时后插入图标的 display:flex，保留完整层级以确保覆盖它。 */
+.video-player
+  .art-video-player
+  .art-settings
+  .art-setting-panel
+  .art-setting-item[data-name^="online-subtitle-option-"] {
+  justify-content: center;
+}
+
+.video-player
+  .art-video-player
+  .art-settings
+  .art-setting-panel
+  .art-setting-item[data-name^="online-subtitle-option-"]
+  > .art-setting-item-left
+  > .art-setting-item-left-icon {
+  display: none;
+}
+
+/* 全屏时让字幕跟随 object-fit: contain 后的实际画面下缘，而不是视口底部。 */
+.art-video-player.art-fullscreen,
+.art-video-player.art-fullscreen-web,
+.art-video-player.art-manual-orientation {
+  --art-subtitle-bottom: var(--video-player-subtitle-bottom, 15px);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .art-video-player.art-fullscreen,
+  .art-video-player.art-fullscreen-web,
+  .art-video-player.art-manual-orientation {
+    --art-subtitle-font-size: clamp(28px, 1.8vw, 36px);
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .art-video-player.art-fullscreen,
+  .art-video-player.art-fullscreen-web,
+  .art-video-player.art-manual-orientation {
+    --art-subtitle-font-size: 20px;
+  }
+
+  .art-video-player.art-fullscreen[data-video-player-subtitle-orientation="landscape"],
+  .art-video-player.art-fullscreen-web[data-video-player-subtitle-orientation="landscape"],
+  .art-video-player.art-manual-orientation[data-video-player-subtitle-orientation="landscape"] {
+    --art-subtitle-font-size: 28px;
+  }
+
+  /* 竖屏画面下方空间充足，控制栏显隐时保持字幕位置稳定。 */
+  .art-video-player.art-fullscreen.art-control-show[data-video-player-subtitle-orientation="portrait"]
+    .art-subtitle,
+  .art-video-player.art-fullscreen-web.art-control-show[data-video-player-subtitle-orientation="portrait"]
+    .art-subtitle,
+  .art-video-player.art-manual-orientation.art-control-show[data-video-player-subtitle-orientation="portrait"]
+    .art-subtitle {
+    bottom: var(--art-subtitle-bottom);
+  }
+}
+
 .video-player .art-poster {
   background-color: #000;
   background-position: center;

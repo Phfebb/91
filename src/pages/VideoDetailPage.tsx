@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   useLocation,
   useNavigate,
@@ -22,7 +22,7 @@ import {
 import { useAuth } from "@/admin/AuthContext";
 import { useDocumentScrollLock } from "@/lib/useDocumentScrollLock";
 import { resolveVideoReturnPath } from "@/lib/videoReturnPath";
-import type { TagItem, VideoDetail, VideoSubtitle } from "@/types";
+import type { TagItem, VideoDetail } from "@/types";
 
 const DETAIL_CACHE_LIMIT = 20;
 const RELATED_CACHE_LIMIT = 80;
@@ -30,7 +30,6 @@ const RELATED_CACHE_LIMIT = 80;
 type VideoDetailSnapshot = {
   detail: VideoDetail;
   tags: TagItem[];
-  subtitles: VideoSubtitle[];
 };
 
 const cachedVideoDetailsByID = new Map<string, VideoDetailSnapshot>();
@@ -54,27 +53,6 @@ function rememberVideoDetail(snapshot: VideoDetailSnapshot) {
 function forgetVideoDetail(id: string) {
   cachedVideoDetailsByID.delete(id);
   cachedRelatedVideosByID.delete(id);
-}
-
-function haveSameSubtitles(
-  current: VideoSubtitle[],
-  next: VideoSubtitle[]
-): boolean {
-  return (
-    current.length === next.length &&
-    current.every((subtitle, index) => {
-      const candidate = next[index];
-      return (
-        subtitle.name === candidate.name &&
-        subtitle.label === candidate.label &&
-        subtitle.language === candidate.language &&
-        subtitle.ext === candidate.ext &&
-        subtitle.type === candidate.type &&
-        subtitle.url === candidate.url &&
-        subtitle.source === candidate.source
-      );
-    })
-  );
 }
 
 function rememberRelatedVideos(id: string, videos: VideoDetail["relatedVideos"]) {
@@ -114,9 +92,6 @@ function VideoDetailContent({ id }: { id?: string }) {
     initialSnapshot?.detail ?? null
   );
   const [tags, setTags] = useState<TagItem[]>(initialSnapshot?.tags ?? []);
-  const [subtitles, setSubtitles] = useState<VideoSubtitle[]>(
-    initialSnapshot?.subtitles ?? []
-  );
   const [loading, setLoading] = useState(initialSnapshot === null);
   const [tagSaving, setTagSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -142,9 +117,10 @@ function VideoDetailContent({ id }: { id?: string }) {
       document.title = initialSnapshot.detail.title;
     }
 
-    // 命中快照时保留当前画面，在后台静默校验最新详情、标签和字幕。
-    Promise.all([fetchVideoDetail(id), fetchTags(), fetchVideoSubtitles(id)]).then(
-      ([d, tagList, subtitleList]) => {
+    // 命中快照时保留当前画面，在后台静默校验最新详情和标签。
+    // 字幕只在用户打开播放器的字幕菜单后请求。
+    Promise.all([fetchVideoDetail(id), fetchTags()]).then(
+      ([d, tagList]) => {
         if (!active) return;
         const stableDetail = withStableRelatedVideos(d);
 
@@ -154,23 +130,14 @@ function VideoDetailContent({ id }: { id?: string }) {
           return;
         }
 
-        const stableSubtitles = stableDetail
-          ? initialSnapshot &&
-            haveSameSubtitles(initialSnapshot.subtitles, subtitleList)
-            ? initialSnapshot.subtitles
-            : subtitleList
-          : [];
-
         if (stableDetail) {
           rememberVideoDetail({
             detail: stableDetail,
             tags: tagList,
-            subtitles: stableSubtitles,
           });
         }
         setDetail(stableDetail);
         setTags(tagList);
-        setSubtitles(stableSubtitles);
         setLoading(false);
         document.title = stableDetail ? stableDetail.title : "视频不存在";
       }
@@ -187,7 +154,7 @@ function VideoDetailContent({ id }: { id?: string }) {
       const updated = await updateVideoTags(detail.id, nextTags);
       const nextDetail = { ...detail, tags: updated.tags ?? [] };
       setDetail(nextDetail);
-      rememberVideoDetail({ detail: nextDetail, tags, subtitles });
+      rememberVideoDetail({ detail: nextDetail, tags });
     } finally {
       setTagSaving(false);
     }
@@ -230,6 +197,11 @@ function VideoDetailContent({ id }: { id?: string }) {
     // 失败静默忽略，不打扰用户播放体验
     recordView(detail.id).catch(() => undefined);
   }
+
+  const loadSubtitles = useCallback(() => {
+    if (!id) return Promise.resolve([]);
+    return fetchVideoSubtitles(id);
+  }, [id]);
 
   if (loading) {
     return (
@@ -339,7 +311,7 @@ function VideoDetailContent({ id }: { id?: string }) {
                     src={detail.videoSrc}
                     poster={detail.poster}
                     previewSrc={detail.previewSrc}
-                    subtitles={subtitles}
+                    loadSubtitles={loadSubtitles}
                     title={detail.title}
                     onFirstPlay={handleFirstPlay}
                   />

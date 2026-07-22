@@ -11,7 +11,6 @@ import {
   VideoShareUnavailableError,
   type VideoShareClaim,
 } from "@/data/videos";
-import type { VideoSubtitle } from "@/types";
 
 type LoadState = "loading" | "ready" | "unavailable" | "error";
 
@@ -20,13 +19,11 @@ export default function SharedVideoPage() {
   const token = location.hash.startsWith("#") ? location.hash.slice(1) : "";
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [claim, setClaim] = useState<VideoShareClaim | null>(null);
-  const [subtitles, setSubtitles] = useState<VideoSubtitle[]>([]);
 
   useEffect(() => {
     let active = true;
     window.scrollTo({ top: 0, behavior: "auto" });
     setClaim(null);
-    setSubtitles([]);
     setLoadState("loading");
 
     if (!token) {
@@ -38,7 +35,7 @@ export default function SharedVideoPage() {
     }
 
     consumeVideoShare(token)
-      .then(async (result) => {
+      .then((result) => {
         if (!active) return;
         window.history.replaceState(
           window.history.state,
@@ -48,8 +45,6 @@ export default function SharedVideoPage() {
         setClaim(result);
         setLoadState("ready");
         document.title = `${result.video.title} - 视频分享`;
-        const items = await fetchSharedVideoSubtitles(result.shareId);
-        if (active) setSubtitles(items);
       })
       .catch((error: unknown) => {
         if (!active) return;
@@ -70,6 +65,11 @@ export default function SharedVideoPage() {
   function handleFirstPlay() {
     if (!claim) return;
     recordSharedVideoView(claim.shareId).catch(() => undefined);
+  }
+
+  function loadSubtitles() {
+    if (!claim) return Promise.resolve([]);
+    return fetchSharedVideoSubtitles(claim.shareId);
   }
 
   return (
@@ -140,7 +140,7 @@ export default function SharedVideoPage() {
                   src={claim.video.videoSrc}
                   poster={claim.video.poster}
                   previewSrc={claim.video.previewSrc}
-                  subtitles={subtitles}
+                  loadSubtitles={loadSubtitles}
                   title={claim.video.title}
                   onFirstPlay={handleFirstPlay}
                 />
